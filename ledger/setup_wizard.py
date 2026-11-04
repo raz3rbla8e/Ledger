@@ -32,7 +32,13 @@ def _test_imap(host, user, pw):
         return str(e)
 
 
+AUTO = False  # `setup --auto`: no questions — keep what works, accept defaults, skip anything that needs typing
+
+
 def _yes(q, default=True):
+    if AUTO:
+        print(f"{q} → {'yes' if default else 'no'} (auto)")
+        return default
     a = input(f"{q} [{'Y/n' if default else 'y/N'}] ").strip().lower()
     return default if not a else a in ("y", "yes")
 
@@ -56,7 +62,9 @@ def _import_profile(cfg):
     return False
 
 
-def run(cfg):
+def run(cfg, auto=False):
+    global AUTO
+    AUTO = auto
     env = cfg["_home"] / ".env"
     store = secrets_store.BACKEND if secrets_store.keychain_available() else ".env file"
     print(f"\nLedger setup — your data folder is {cfg['_home']}\nSecrets are stored in: {store}\n")
@@ -65,10 +73,12 @@ def run(cfg):
     if _import_profile(cfg):
         from . import config
         cfg = config.load()
-    elif not cfg["me"].get("names"):
+    elif not cfg["me"].get("names") and not AUTO:
         name = input("   Your full name as it appears on e-transfers (e.g. 'Jane A Doe'): ").strip()
         if name:
             print("   → add it (and any variants) under [me] names in config.toml")
+    elif not cfg["me"].get("names"):
+        print("   ✗ no profile yet — fill in [me] in config.toml (see config.example.toml)")
     else:
         print("   ✓ profile already set")
 
@@ -78,8 +88,12 @@ def run(cfg):
         print("   No inboxes in config.toml yet — add an [[email.inboxes]] block (see config.example.toml) and re-run.")
     for ib in inboxes(cfg):
         cur = secrets_store.get(ib["password_env"])
-        if cur and not _test_imap(ib["imap_host"], ib["address"], cur):
+        err = _test_imap(ib["imap_host"], ib["address"], cur) if cur else "no app password saved yet"
+        if not err:
             print(f"   ✓ {ib['address']} works")
+            continue
+        if AUTO:
+            print(f"   ✗ {ib['address']}: {err}\n     → run `python -m ledger setup` to enter a new app password for it")
             continue
         while True:
             pw = getpass.getpass(f"   App password for {ib['address']} (hidden, Enter to skip): ").strip()
@@ -97,6 +111,8 @@ def run(cfg):
     print("\n3) Telegram — alerts, morning brief, and chat. In Telegram: @BotFather → /newbot → copy the token.")
     if secrets_store.get("TELEGRAM_BOT_TOKEN") and secrets_store.get("TELEGRAM_CHAT_ID"):
         print("   ✓ already linked")
+    elif AUTO:
+        print("   not linked — run `python -m ledger setup` to add it")
     else:
         tok = getpass.getpass("   Bot token (hidden, Enter to skip): ").strip()
         if tok:
@@ -124,10 +140,15 @@ def run(cfg):
         secrets_store.set("LEDGER_WIDGET_TOKEN", secrets.token_urlsafe(24), env)
     if not secrets_store.get("LEDGER_HOOK_TOKEN"):
         secrets_store.set("LEDGER_HOOK_TOKEN", secrets.token_urlsafe(24), env)
-    print("   Widget token (paste into the Scriptable script):    " + secrets_store.get("LEDGER_WIDGET_TOKEN"))
-    print("   Apple Pay token (paste into the iPhone Shortcut):   " + secrets_store.get("LEDGER_HOOK_TOKEN"))
-    print("   These only allow reading 3 numbers / adding a purchase — nothing else.")
-    if not secrets_store.get("LEDGER_DASHBOARD_PASSWORD"):
+    if AUTO:
+        print("   ✓ phone tokens ready (run `python -m ledger setup` when you set up the iPhone widget to see them)")
+    else:
+        print("   Widget token (paste into the Scriptable script):    " + secrets_store.get("LEDGER_WIDGET_TOKEN"))
+        print("   Apple Pay token (paste into the iPhone Shortcut):   " + secrets_store.get("LEDGER_HOOK_TOKEN"))
+        print("   These only allow reading 3 numbers / adding a purchase — nothing else.")
+    if secrets_store.get("LEDGER_DASHBOARD_PASSWORD"):
+        print("   ✓ dashboard password set (for opening it from your phone over Tailscale)")
+    elif not AUTO:
         if _yes("   Open the full dashboard from your phone over Tailscale? (sets a dashboard password)", True):
             while True:
                 p1 = getpass.getpass("   Choose a dashboard password (12+ characters): ")

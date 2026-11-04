@@ -134,6 +134,7 @@ def main(argv=None):
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=None)
     ap.add_argument("--no-browser", action="store_true")
+    ap.add_argument("--auto", action="store_true", help="setup: no questions — keep what works, accept defaults")
     a = ap.parse_args(argv)
 
     if a.cmd == "demo":
@@ -157,7 +158,7 @@ def main(argv=None):
     con = _con(cfg)
     if a.cmd == "setup":
         from .setup_wizard import run as setup
-        return setup(cfg)
+        return setup(cfg, auto=a.auto)
     if a.cmd == "status":
         return status(cfg, con)
     if a.cmd == "sync":

@@ -397,6 +397,23 @@ def _uidvalidity(M):
         return 0
 
 
+def _message_ids(M, uids):
+    """{uid: '<message-id>'} for a batch of UIDs in a single FETCH."""
+    typ, data = M.uid("FETCH", ",".join(map(str, uids)), "(UID BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])")
+    out = {}
+    if typ != "OK" or not data:
+        return out
+    for i, part in enumerate(data):
+        if isinstance(part, tuple) and len(part) >= 2:
+            u = re.search(rb"UID (\d+)", part[0])
+            if not u and i + 1 < len(data) and isinstance(data[i + 1], bytes):  # servers may put UID after the literal
+                u = re.search(rb"UID (\d+)", data[i + 1])
+            m = re.search(rb"<[^>]+>", part[1] or b"")
+            if u and m:
+                out[int(u.group(1))] = m.group(0).decode(errors="ignore")
+    return out
+
+
 def _sync_inbox(con, cfg, cz, ib, pw, stats, log):
     """Only asks Gmail for messages newer than the last one seen (UID tracking), and only downloads a full
     email after checking its Message-ID isn't already stored. Read-only: nothing is marked as read."""
@@ -428,22 +445,26 @@ def _sync_inbox(con, cfg, cz, ib, pw, stats, log):
                 if typ == "OK" and data and data[0]:
                     uids += data[0].split()
         uids = sorted({int(u) for u in uids if int(u) > last_uid})
+        if len(uids) > 50:
+            log(f"  email {ib['address']}: checking {len(uids)} bank emails…")
         new = 0
-        for uid in uids:
-            typ, data = M.uid("FETCH", str(uid), "(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])")
-            mid = ""
-            if typ == "OK" and data and isinstance(data[0], tuple):
-                mm = re.search(rb"<[^>]+>", data[0][1])
-                mid = mm.group(0).decode(errors="ignore") if mm else ""
-            if mid and con.execute("SELECT 1 FROM seen_emails WHERE msg_id=?", (mid,)).fetchone():
-                continue
-            typ, data = M.uid("FETCH", str(uid), "(BODY.PEEK[])")
-            if typ != "OK" or not data or not isinstance(data[0], tuple):
-                continue
-            ingest_message(con, cfg, cz, data[0][1], stats)
-            new += 1
-        if uids:
-            con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)", (ukey, f"{uv}:{max(uids)}"))
+        for i in range(0, len(uids), 200):  # Message-IDs for 200 emails per round trip, then bodies only for unseen ones
+            chunk = uids[i:i + 200]
+            mids = _message_ids(M, chunk)
+            for uid in chunk:
+                mid = mids.get(uid, "")
+                if mid and con.execute("SELECT 1 FROM seen_emails WHERE msg_id=?", (mid,)).fetchone():
+                    continue
+                typ, data = M.uid("FETCH", str(uid), "(BODY.PEEK[])")
+                if typ != "OK" or not data or not isinstance(data[0], tuple):
+                    continue
+                ingest_message(con, cfg, cz, data[0][1], stats)
+                new += 1
+            # save progress as we go, so a restart mid-backfill resumes instead of starting over
+            con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)", (ukey, f"{uv}:{chunk[-1]}"))
+            con.commit()
+            if len(uids) > 200:
+                log(f"  email {ib['address']}: {min(i + 200, len(uids))}/{len(uids)} checked, {new} new so far")
         if new:
             log(f"  email {ib['address']}: {new} new")
         con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)", (key, datetime.now().isoformat()))

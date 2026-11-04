@@ -34,3 +34,44 @@ t.start(); time.sleep(3.5); stop.set()
 print("connections", len(conns), "mail hits", len(hits), "logs", logs)
 assert len(conns) >= 2 and len(hits) >= 1 and not logs
 print("IDLE OK")
+
+# ── batched Message-ID fetch + resumable backfill ──
+d = [(b"1 (UID 101 BODY[HEADER.FIELDS (MESSAGE-ID)] {22}", b"Message-ID: <a@x>\r\n\r\n"), b")",
+     (b"2 (BODY[HEADER.FIELDS (MESSAGE-ID)] {22}", b"Message-ID: <b@x>\r\n\r\n"), b" UID 102)"]
+class FM:
+    def uid(self, *a):
+        return "OK", d
+assert ie._message_ids(FM(), [101, 102]) == {101: "<a@x>", 102: "<b@x>"}
+print("batch fetch OK")
+
+import os, tempfile
+os.environ["LEDGER_HOME"] = tempfile.mkdtemp(); os.environ["LEDGER_NO_KEYCHAIN"] = "1"
+from ledger import config, db
+from ledger.categorize import Categorizer
+cfg = config.load(); con = db.connect(cfg["_home"] / "ledger.db"); cz = Categorizer(con, cfg)
+UIDS = list(range(1, 451))
+body = lambda u: (f"Message-ID: <m{u}@x>\r\nFrom: alerts@tangerine.ca\r\nSubject: hello\r\nDate: Mon, 2 Nov 2026 10:00:00 -0500\r\n\r\nnothing\r\n").encode()
+fetched = []
+class FakeIMAP:
+    def response(self, k): return "OK", [b"7"]
+    def logout(self): pass
+    def uid(self, cmd, *a):
+        if cmd == "SEARCH":
+            lo = int(a[1].split(b":" if isinstance(a[1], bytes) else ":")[0]) if a[0] == "UID" else 1
+            return "OK", [" ".join(str(u) for u in UIDS if u >= lo).encode()]
+        ids, what = a
+        if "MESSAGE-ID" in what:
+            out = []
+            for u in map(int, ids.split(",")):
+                out += [(f"{u} (UID {u} BODY[HEADER.FIELDS (MESSAGE-ID)] {{20}}".encode(), f"Message-ID: <m{u}@x>\r\n\r\n".encode()), b")"]
+            return "OK", out
+        fetched.append(int(ids)); return "OK", [(b"x", body(int(ids))), b")"]
+ie._open = lambda ib, pw: (FakeIMAP(), True)
+ib = {"address": "me@gmail.com", "password_env": "X", "imap_host": "imap.gmail.com"}
+stats = {}
+ie._sync_inbox(con, cfg, cz, ib, "pw", stats, lambda *a: None)
+assert len(fetched) == 450 and con.execute("SELECT value FROM meta WHERE key='email_uid:me@gmail.com'").fetchone()[0] == "7:450"
+fetched.clear(); UIDS.append(451)
+ie._sync_inbox(con, cfg, cz, ib, "pw", stats, lambda *a: None)
+assert fetched == [451], fetched  # only the new one
+print("backfill OK")

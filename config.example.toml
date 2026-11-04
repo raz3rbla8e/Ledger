@@ -1,0 +1,90 @@
+# ─────────────────────────────────────────────────────────────
+#  EXAMPLE Ledger config. Copy to ~/Ledger/config.toml and edit. Your real one never goes in git.
+#  `python -m ledger setup` fills in the personal parts for you.
+# ─────────────────────────────────────────────────────────────
+
+[me]
+name = ""
+# Names your own e-transfers show up under. Money moving between these = internal transfer, not income/spending.
+names = []
+# Money you move to yourself FROM these banks counts as income, e.g. { RBC = "Government & Benefits" }
+income_when_moved_from = {}
+
+[email]
+# Reads the alert emails your banks + Interac already send. Gmail *app passwords* — never bank logins.
+enabled = true
+backfill_since = "2025-09-01"
+require_authenticated_senders = true   # ignore bank-looking emails that fail DKIM/SPF/DMARC (spoofs)
+
+[[email.inboxes]]
+address = "you@gmail.com"
+password_env = "LEDGER_IMAP_PASSWORD"     # the app password itself goes in the OS keychain via `python -m ledger setup`
+
+[files]
+inbox = "inbox"
+watch = ["~/Downloads"]           # bank CSV/OFX exports saved here are imported automatically
+
+[sync]
+every_minutes = 10                # fallback poll; new mail normally arrives instantly via IMAP IDLE
+realtime = true
+
+[server]
+port = 8765
+# Extra hostnames allowed to reach the dashboard, e.g. your Tailscale name "laptop.tailnet-1234.ts.net"
+allowed_hosts = []
+
+[ai]
+#   "auto" → local Ollama if running (nothing leaves your PC), otherwise off · "ollama" · "anthropic" · "none"
+provider = "auto"
+ollama_url = "http://localhost:11434"
+ollama_model = "qwen3:8b"
+anthropic_model = "claude-haiku-5-5"
+chat = "local"
+
+[applepay]
+cards = {}                        # Wallet card name → account id, e.g. { "Tangerine" = "tangerine-cc-1234" }
+
+[[people]]
+name = "PAT LANDLORD"               # as it appears on the e-transfer
+outgoing = { category = "Rent" }
+
+[[people]]
+name = "SAM ROOMIE"                 # pays you back their rent share + 50/50 on groceries
+incoming = [
+  { amount_min = 790, amount_max = 810, category = "Rent", kind = "reimbursement" },
+  { category = "Groceries", kind = "reimbursement" },
+]
+
+[plan]
+savings_goal_pct = 20
+cash_buffer = 500
+auto_budgets = true
+horizon = "2027-09-30"
+
+# kind: stop · pause · one_time (amount, − = out) · income (monthly from date) · trip (budget, tags spending)
+[[plan.events]]
+name = "Co-op ends — last paycheque"
+kind = "stop"
+date = "2026-12-31"
+category = "Salary"
+
+[[plan.events]]
+name = "Winter trip"
+kind = "trip"
+start = "2026-12-13"
+end = "2026-12-21"
+budget = 0
+
+[[goals]]
+name = "Emergency fund"
+target = "3x_fixed"
+priority = 1
+
+[notify]
+email = true
+telegram = true
+large_purchase = 150
+morning_brief = "08:30"
+weekly_report = "sun 19:00"
+monthly_report = true
+quiet_hours = "23:00-08:00"

@@ -1,0 +1,7 @@
+services:
+  ledger:
+    build: .
+    restart: unless-stopped
+    ports: ["8765:8765"]
+    volumes: ["./data:/data"]      # your database, config.toml and .env live here
+    environment: [TZ=America/Toronto]

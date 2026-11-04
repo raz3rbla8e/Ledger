@@ -1,0 +1,15 @@
+[project]
+name = "ledger"
+version = "3.0.0"
+description = "Private, self-running money manager — reads bank alert emails, no bank logins"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+ledger = "ledger.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["ledger*"]
+
+[tool.setuptools.package-data]
+ledger = ["static/*"]

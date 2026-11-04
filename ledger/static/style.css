@@ -80,10 +80,10 @@ main{flex:1;min-width:0;padding:26px 32px 96px;max-width:1360px}
 .clock{font-size:13px;color:var(--text-muted);white-space:nowrap}
 
 /* ── today: hero (the one loud thing) ── */
-.hero{display:grid;grid-template-columns:auto 1fr;gap:40px;align-items:center;padding:30px 34px;border-radius:24px;
+.hero{display:grid;grid-template-columns:auto 1fr;gap:40px;align-items:start;padding:30px 34px;border-radius:24px;
   background:radial-gradient(120% 140% at 0% 0%,var(--glow),transparent 55%),var(--deck-hi);border:1px solid var(--border);position:relative;overflow:hidden}
 .hero.over{background:radial-gradient(120% 140% at 0% 0%,color-mix(in srgb,var(--ember) 16%,transparent),transparent 55%),var(--deck-hi)}
-.dial-wrap{position:relative;width:260px;height:260px}
+.dial-wrap{position:relative;width:260px;height:260px;position:sticky;top:20px}
 .dial{width:100%;height:100%;overflow:visible}
 .dial circle{fill:none}
 .dial-track{stroke:var(--surface-2);stroke-width:18}
@@ -121,6 +121,40 @@ main{flex:1;min-width:0;padding:26px 32px 96px;max-width:1360px}
 .stat-v.neg{color:var(--ember)}
 .stat-f{font-size:12px;color:var(--text-muted)}
 
+/* ── today: where this month's money goes ── */
+.flow-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:10px}
+.flow-head #flow-title{font-family:"Bricolage",sans-serif;font-weight:600;font-size:17px;letter-spacing:-.015em}
+.flow-head b{font-family:"Bricolage",sans-serif;font-size:18px;color:var(--ice)}
+.flow-head b.neg{color:var(--ember)}
+.flow-head #flow-left{font-size:13px;color:var(--text-muted);white-space:nowrap}
+.flow-bar{display:flex;gap:3px;height:22px}
+.flow-bar i{display:block;height:100%;border-radius:5px;min-width:4px;transition:flex .9s cubic-bezier(.2,.8,.2,1)}
+.f-bills{background:color-mix(in srgb,var(--text-muted) 55%,var(--surface-2))}
+.f-save{background:var(--brass)}
+.f-held{background:repeating-linear-gradient(135deg,var(--brass) 0 4px,color-mix(in srgb,var(--brass) 40%,transparent) 4px 8px)}
+.f-spent{background:var(--ember)}
+.f-free{background:var(--ice)}
+.f-over{background:repeating-linear-gradient(135deg,var(--critical) 0 5px,color-mix(in srgb,var(--critical) 55%,transparent) 5px 10px)}
+.flow-legend{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:10px;font-size:13px;color:var(--text-secondary)}
+.flow-legend span{display:inline-flex;align-items:center;gap:7px}
+.flow-legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.flow-legend b{color:var(--text-primary);font-weight:600}
+.flow-note{margin:14px 0 0;font-size:14px;line-height:1.55;color:var(--text-secondary);max-width:68ch}
+.how{margin-top:12px;font-size:13px}
+.how summary{cursor:pointer;color:var(--ice);font-weight:500;list-style:none;display:inline-flex;align-items:center;gap:6px}
+.how summary::-webkit-details-marker{display:none}
+.how summary::before{content:"";width:6px;height:6px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(-45deg);transition:transform .2s}
+.how[open] summary::before{transform:rotate(45deg)}
+.how .math{margin-top:10px;max-width:560px}
+.outlook{display:grid;grid-template-columns:auto auto 1fr auto;gap:6px 18px;align-items:baseline;padding:16px 22px;border-radius:14px;border:1px solid var(--border);
+  background:var(--surface-1);cursor:pointer;color:inherit;text-decoration:none}
+.outlook:hover{border-color:var(--text-muted)}
+.o-k{font-size:13px;color:var(--text-muted)}
+.o-v{font-family:"Bricolage",sans-serif;font-size:22px;font-weight:650;letter-spacing:-.02em}
+.o-v.neg{color:var(--ember)}
+.o-f{font-size:13px;color:var(--text-secondary)}
+.o-go{font-size:13px;color:var(--ice);font-weight:500}
+
 /* ── today: the stream ── */
 .stream{list-style:none;margin:6px 0 0;padding:0}
 .stream li{display:grid;grid-template-columns:12px 1fr auto auto;gap:12px;align-items:center;padding:10px 6px;border-bottom:1px solid var(--grid);border-radius:8px}
@@ -137,7 +171,7 @@ main{flex:1;min-width:0;padding:26px 32px 96px;max-width:1360px}
 @keyframes arrive{0%{background:color-mix(in srgb,var(--ice) 28%,transparent);transform:translateY(-6px);opacity:.2}15%{transform:none;opacity:1}100%{background:transparent}}
 
 /* ── today: three-week strip ── */
-.strip{display:grid;grid-template-columns:repeat(21,1fr);gap:3px;margin:10px 0 14px}
+.strip{display:grid;grid-template-columns:repeat(28,1fr);gap:2px;margin:10px 0 14px}
 .sd{display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 0 7px;border-radius:7px;background:var(--surface-2);min-width:0}
 .sd.we{background:color-mix(in srgb,var(--surface-2) 60%,transparent)}
 .sd.today{background:color-mix(in srgb,var(--ice) 25%,var(--surface-2));box-shadow:inset 0 0 0 1px var(--ice)}
@@ -262,6 +296,7 @@ table.tx td:first-child{white-space:nowrap;color:var(--text-muted);font-size:13p
 }
 @media (max-width:1180px){
   .hero{grid-template-columns:1fr;justify-items:center;gap:26px}
+  .dial-wrap{position:relative;top:auto}
   .hero-body{width:100%}
   .g-3b{grid-template-columns:1fr 1fr}.g-3b .ask-card{grid-column:1/-1}
   .g-4{grid-template-columns:1fr 1fr}
@@ -280,6 +315,7 @@ table.tx td:first-child{white-space:nowrap;color:var(--text-muted);font-size:13p
   .g-live,.g-2,.g-3,.g-3b,.g-4{grid-template-columns:1fr}
   .g-4{grid-template-columns:1fr 1fr}
   .strip{grid-template-columns:repeat(14,1fr)}.strip .sd:nth-child(n+15){display:none}
+  .outlook{grid-template-columns:1fr auto}.o-f{grid-column:1/-1}
   .mega{font-size:46px}
   .bar-row{grid-template-columns:110px 1fr 96px}
   .tabbar{display:flex;position:fixed;bottom:0;left:0;right:0;z-index:10;background:color-mix(in srgb,var(--surface-1) 88%,transparent);backdrop-filter:blur(12px);border-top:1px solid var(--border);padding:7px 4px calc(7px + env(safe-area-inset-bottom))}
@@ -290,3 +326,12 @@ table.tx td:first-child{white-space:nowrap;color:var(--text-muted);font-size:13p
   table.tx .acct{display:none}
   .stream .s-when{display:none}
 }
+
+/* folded detail */
+details.more>summary{list-style:none;cursor:pointer;display:flex;align-items:baseline;gap:14px}
+details.more>summary::-webkit-details-marker{display:none}
+details.more>summary h3{margin:0}
+details.more>summary .sub{margin:0}
+details.more>summary::after{content:"Show";margin-left:auto;font-size:13px;color:var(--ice);font-weight:500}
+details.more[open]>summary::after{content:"Hide"}
+.mt{margin-top:18px}

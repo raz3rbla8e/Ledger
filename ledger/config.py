@@ -154,6 +154,10 @@ def load() -> dict:
     p.setdefault("events", [])
     p.setdefault("horizon", "")
     cfg.setdefault("goals", [])
+    p.setdefault("cancelled", [])
+    from . import state
+    state.CANCELLED = {str(c).strip().lower() for c in p["cancelled"]}
+    state.FIXED_TOLD = {k: float(v) for k, v in (p.get("fixed") or {}).items()}
     cfg.setdefault("notify", {})
     inbox = h / cfg["files"]["inbox"]
     inbox.mkdir(parents=True, exist_ok=True)

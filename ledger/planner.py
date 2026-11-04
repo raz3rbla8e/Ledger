@@ -89,10 +89,25 @@ def safe_to_spend(con, cfg, today=None):
     end = m0 + timedelta(days=nd)
     prev = _months_back(4, m0)[:-1]
     other_m = other_income_monthly(con, today)
+    paydays = []
     if pc:
-        pay_m = pc["typical"] * 30.44 / pc["every_days"]
+        # this month's pay = what has actually landed + each payday still to come this month (4 or 5 of them for
+        # weekly pay), stopping when a plan event ends your pay (e.g. the co-op's last day)
+        stop = min([date.fromisoformat(e["date"]) for e in cfg["plan"].get("events", [])
+                    if e.get("kind") == "stop" and "Salary" in (e["category"] if isinstance(e.get("category"), list) else [e.get("category")])]
+                   or [date.max])
+        got = con.execute("SELECT COALESCE(sum(amount),0), count(*) FROM transactions WHERE category='Salary' AND amount>0 AND date>=? AND date<=?",
+                          (m0.isoformat(), today.isoformat())).fetchone()
+        nd_ = date.fromisoformat(pc["next"])
+        while nd_ < end:
+            if today < nd_ <= stop:
+                paydays.append(nd_.isoformat())
+            nd_ += timedelta(days=pc["every_days"])
+        pay_m = round(got[0] + pc["typical"] * len(paydays), 2)
+        pay_detail = dict(received=round(got[0], 2), received_count=got[1], coming=paydays, typical=pc["typical"])
     else:
         pay_m = (con.execute(f"SELECT sum(amount) FROM transactions WHERE category='Salary' AND substr(date,1,7) IN (?,?,?)", prev).fetchone()[0] or 0) / 3
+        pay_detail = None
     income = round(pay_m + other_m, 2)
     # fixed = what your fixed categories (rent, Dad, phone, subscriptions…) normally cost per month, net of paybacks
     fx = ",".join("?" * len(FIXED))
@@ -118,7 +133,16 @@ def safe_to_spend(con, cfg, today=None):
     rec = [r for r in recurring(con) if r["active"]]
     upcoming = sorted([dict(merchant=r["merchant"], amount=r["amount"], due=r["next_expected"]) for r in rec
                        if r["next_expected"] and today.isoformat() < r["next_expected"] < end.isoformat()], key=lambda x: x["due"])
-    save = round(income * goal, 2)
+    # savings come out only when they fit: after bills, keep at least your usual everyday spending; otherwise the
+    # goal is reported as not fitting instead of quietly pushing "safe to spend" below zero
+    room = round(income - fixed, 2)
+    try:
+        from .forecast import _flex_daily
+        usual = round(_flex_daily(con, today) * 30.44, 2)
+    except Exception:
+        usual = 0.0
+    goal_amt = round(income * goal, 2)
+    save = round(max(0.0, min(goal_amt, room - usual)), 2)
     flex = round(income - save - fixed, 2)
     left = round(flex - var_spent, 2)
     days_left = max(1, (end - today).days)
@@ -133,13 +157,14 @@ def safe_to_spend(con, cfg, today=None):
             months_to_low = max(1.0, (date.fromisoformat(fc["low"]["date"]) - today).days / 30.44)
             # hold back a fair share now, but never more than half your flexible money — the rest of the gap
             # has to be closed by income (OSAP, TA, job) or bigger changes, which the Plan page spells out
-            hold = round(min(gap / months_to_low, 0.5 * max(0.0, income - save - fixed)), 2)
+            hold = round(min(gap / months_to_low, 0.5 * max(0.0, income - save - fixed - usual)), 2)
             why = f"cash is projected to run short by ${gap:,.0f} by {date.fromisoformat(fc['low']['date']):%b %Y}"
     except Exception:
         fc, gap = None, 0.0
     left = round(left - hold, 2)
     return dict(hold_back=hold, hold_reason=why, plan_gap=gap, period_start=m0.isoformat(), period_end=(end - timedelta(days=1)).isoformat(), income=income, pay_monthly=round(pay_m, 2),
-                other_income_monthly=round(other_m, 2), savings_set_aside=save, fixed_monthly=fixed,
+                other_income_monthly=round(other_m, 2), pay_detail=pay_detail, savings_set_aside=save, savings_goal=goal_amt,
+                room_after_bills=room, usual_everyday=usual, fixed_monthly=fixed,
                 fixed_items=sorted(items, key=lambda x: -x["amount"]),
                 flexible_budget=flex, spent=round(var_spent, 2), upcoming_bills=upcoming, upcoming_total=round(sum(u["amount"] for u in upcoming), 2),
                 safe_to_spend=left, per_day=round(left / days_left, 2), today_allowance=round(max(0, left) / days_left, 2), days_left=days_left, pay=pc, has_pay=bool(pc),

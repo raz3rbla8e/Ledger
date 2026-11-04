@@ -190,3 +190,15 @@ for d, a in (("2026-08-10", 90), ("2026-09-08", 2350), ("2026-09-20", 60), ("202
 con.commit()
 assert planner.other_income_monthly(con, _dd(2026, 11, 4)) == 90.0  # medians of 90, 60, 250 — the $2,350 lump is a one-off
 print("pins/fixed/lumps OK")
+
+# ── this month's pay counts real paydays (4 or 5 weekly cheques), not an average ──
+con.execute("DELETE FROM transactions")
+for d in ("2026-10-14", "2026-10-21", "2026-10-28", "2026-11-04"):
+    con.execute("INSERT INTO transactions(account_id, date, amount, description, merchant, category, kind, cat_source, source, status, reviewed) "
+                "VALUES ('x',?,992.89,'DIRECT DEPOSIT FROM EMPLOYER','Employer','Salary','income','default','email','pending',1)", (d,))
+con.commit()
+cfg["plan"]["events"] = []
+s_ = planner.safe_to_spend(con, cfg, _dd(2026, 11, 4))
+assert s_["pay_monthly"] == round(992.89 * 4, 2), s_["pay_detail"]          # Nov 4 landed + Nov 11, 18, 25
+assert s_["pay_detail"]["coming"] == ["2026-11-11", "2026-11-18", "2026-11-25"]
+print("paydays OK")

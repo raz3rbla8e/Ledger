@@ -188,7 +188,8 @@ def recurring(con):
         last = items[-1][0]
         step = {"weekly": 7, "monthly": round(g), "yearly": 365}[cadence]
         nxt = last + timedelta(days=step)
-        active = (date.today() - last).days <= step * 1.6
+        from .state import is_cancelled
+        active = (date.today() - last).days <= step * 1.6 and not is_cancelled(mer)
         amt = round(items[-1][1], 2)
         out.append(dict(merchant=mer, category=cat, cadence=cadence, amount=amt, count=len(items), last=last.isoformat(),
                         next_expected=nxt.isoformat() if active else None, active=active,
@@ -216,7 +217,10 @@ def recurring(con):
         nxt = date(today.year, today.month, min(day, 28))
         if nxt.isoformat() <= last or nxt < today:
             nxt = (nxt.replace(day=1) + timedelta(days=32)).replace(day=min(day, 28))
-        out.append(dict(merchant=rows[-1]["merchant"], category=rows[-1]["category"], cadence="monthly", amount=round(statistics.median(vals), 2),
+        from .state import FIXED_TOLD
+        told = FIXED_TOLD.get(rows[-1]["category"])  # e.g. Dad: the amount you plan to send, not last months' average
+        out.append(dict(merchant=rows[-1]["merchant"], category=rows[-1]["category"], cadence="monthly",
+                        amount=round(told if told is not None else statistics.median(vals), 2),
                         count=len(rows), last=last, next_expected=nxt.isoformat(), active=(today - date.fromisoformat(last)).days < 50,
                         yearly_cost=round(statistics.median(vals) * 12, 2), split=True))
     return sorted(out, key=lambda x: (not x["active"], -x["yearly_cost"]))

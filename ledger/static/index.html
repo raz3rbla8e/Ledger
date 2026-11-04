@@ -61,18 +61,17 @@
         </div>
         <div class="hero-body">
           <p class="hero-line" id="hero-line"></p>
-          <div class="runway">
-            <div class="runway-head"><span id="runway-title">This month</span><span id="runway-left"></span></div>
-            <div class="runway-bar" id="runway"><i class="r-spent" id="r-spent"></i><i class="r-bills" id="r-bills"></i><i class="r-now" id="r-now"></i></div>
-            <div class="runway-legend" id="runway-legend"></div>
-          </div>
-          <div class="stats">
-            <div class="stat" id="cashcard"><span class="stat-k">Cash on hand</span><span class="stat-v" id="t-cash">—</span><span class="stat-f" id="t-cash-sub"></span></div>
-            <div class="stat"><span class="stat-k" id="t-fc-k">By Sept 2027</span><span class="stat-v" id="t-fc">—</span><span class="stat-f" id="t-fc-sub"></span></div>
-            <div class="stat"><span class="stat-k">This month</span><span class="stat-v" id="t-net">—</span><span class="stat-f" id="t-net-sub"></span></div>
+          <div class="flow">
+            <div class="flow-head"><span id="flow-title">November</span><span id="flow-left"></span></div>
+            <div class="flow-bar" id="flow-bar"></div>
+            <div class="flow-legend" id="flow-legend"></div>
+            <p class="flow-note" id="flow-note"></p>
+            <details class="how"><summary>How this is worked out</summary><div class="math" id="t-math"></div></details>
           </div>
         </div>
       </div>
+
+      <a class="outlook" id="outlook" data-go="plan"></a>
 
       <div class="grid g-live">
         <div class="card stream-card">
@@ -80,15 +79,10 @@
           <ul class="stream" id="t-stream"></ul>
         </div>
         <div class="card">
-          <h3>Next three weeks</h3>
+          <h3>Next four weeks</h3>
           <div class="strip" id="t-strip"></div>
           <ul class="timeline" id="t-upcoming"></ul>
         </div>
-      </div>
-
-      <div class="card river-card">
-        <div class="row-between"><div><h3>Where your cash is headed</h3><div class="sub" id="t-river-sub"></div></div><a class="link" data-go="plan">Plan</a></div>
-        <div class="chart river"><canvas id="c-spark"></canvas></div>
       </div>
 
       <div class="grid g-3b">
@@ -107,34 +101,36 @@
     <section id="p-spending" class="page hidden">
       <div class="grid g-4" id="s-kpis"></div>
       <div class="grid g-2">
-        <div class="card"><h3>Budgets</h3><div class="sub">Learned from your last 3 months unless you set your own · 🔥 running hot · 🚨 over</div><div id="s-budgets"></div></div>
-        <div class="card"><h3>Where it went</h3><div class="sub">This month · tick = your 3-month average · tap to see transactions</div><div id="s-cats"></div></div>
+        <div class="card"><h3>Budgets</h3><div class="sub">Your usual month per category, learned from the last 3 months. Orange means running ahead of the month.</div><div id="s-budgets"></div></div>
+        <div class="card"><h3>Where it went</h3><div class="sub">This month. The thin mark is your usual month. Tap a row to see the purchases.</div><div id="s-cats"></div></div>
       </div>
-      <div class="card"><h3>Everyday spending calendar</h3><div class="sub">Darker = more spent that day (rent, Dad and bills excluded)</div><div id="s-heat" class="heat"></div></div>
-      <div class="grid g-2">
-        <div class="card"><h3>Income vs spending</h3><div class="sub">12 months · transfers between your accounts excluded</div>
-          <div class="legend"><span><i style="background:var(--s1)"></i>Income</span><span><i style="background:var(--s2)"></i>Spending</span></div>
+      <div class="card"><h3>Money in vs money out</h3><div class="sub">Last 12 months. Moving money between your own accounts isn’t counted.</div>
+          <div class="legend"><span><i style="background:var(--s3)"></i>In</span><span><i style="background:var(--s2)"></i>Out</span></div>
           <div class="chart"><canvas id="c-monthly"></canvas></div></div>
-        <div class="card"><h3>Pace</h3><div class="sub">Cumulative spending, this month vs last</div>
-          <div class="legend"><span><i style="background:var(--s1)"></i>This month</span><span><i style="background:var(--text-muted)"></i><span id="pace-prev">Last month</span></span></div>
-          <div class="chart"><canvas id="c-pace"></canvas></div></div>
-      </div>
-      <div class="card"><h3>By area, 12 months</h3><div class="sub">Top areas; the rest folded into Other</div><div class="legend" id="trend-legend"></div><div class="chart tall"><canvas id="c-trend"></canvas></div></div>
       <div class="grid g-2">
         <div class="card"><h3>Top merchants</h3><div class="sub">This month</div><table id="s-merchants"></table></div>
-        <div class="card"><h3>People</h3><div class="sub">E-transfers in and out, all time</div><table id="s-people"></table></div>
+        <div class="card"><h3>People</h3><div class="sub">E-transfers with each person since your records start</div><table id="s-people"></table></div>
       </div>
+      <details class="more card"><summary><h3>More charts</h3><span class="sub">Daily spending calendar, this month’s pace, and spending by area</span></summary>
+        <h3 class="mt">Everyday spending calendar</h3><div class="sub">Darker means more spent that day. Rent, Dad and bills aren’t included.</div><div id="s-heat" class="heat"></div>
+        <div class="grid g-2 mt">
+          <div><h3>Pace</h3><div class="sub">Cumulative spending, this month vs last</div>
+          <div class="legend"><span><i style="background:var(--s1)"></i>This month</span><span><i style="background:var(--text-muted)"></i><span id="pace-prev">Last month</span></span></div>
+          <div class="chart"><canvas id="c-pace"></canvas></div></div>
+          <div><h3>By area, 12 months</h3><div class="sub">Top areas; the rest folded into Other</div><div class="legend" id="trend-legend"></div><div class="chart tall"><canvas id="c-trend"></canvas></div></div>
+        </div>
+      </details>
       <div class="card hidden" id="s-tripcard"><h3>Trips</h3><div class="sub">Tagged automatically by date</div><div id="s-trips"></div></div>
     </section>
 
     <!-- PLAN -->
     <section id="p-plan" class="page hidden">
       <div class="card">
-        <div class="row-between"><div><h3>Cash forecast</h3><div class="sub" id="f-sub"></div></div><div class="legend"><span><i style="background:var(--s1)"></i>Projected cash</span><span><i class="dash"></i>Buffer</span></div></div>
+        <div class="row-between"><div><h3>Cash forecast</h3><div class="sub" id="f-sub"></div></div><div class="legend"><span><i style="background:var(--s1)"></i>Projected cash</span><span><i class="dash"></i>Cushion</span></div></div>
         <div class="chart xl"><canvas id="c-forecast"></canvas></div>
         <div id="f-callouts" class="callouts"></div>
       </div>
-      <div class="card"><h3>What if…</h3><div class="sub">Try scenarios — nothing is saved to your plan. Blank = $0.</div>
+      <div class="card"><h3>What if…</h3><div class="sub">Try a scenario. Nothing here changes your plan, and blank boxes count as $0.</div>
         <form id="wif" class="wif">
           <label>Job take-home / mo<input id="w-job" inputmode="decimal" placeholder="e.g. 4200"></label>
           <label>Starting<select id="w-start"><option value="2027-05">May 2027</option><option value="2027-06">Jun 2027</option><option value="2027-07">Jul 2027</option><option value="2027-08">Aug 2027</option><option value="2027-09" selected>Sep 2027</option></select></label>
@@ -143,15 +139,15 @@
           <button class="btn primary">Run it</button><button class="btn" type="button" id="w-clear">Clear</button>
         </form><div id="w-result" class="sub" style="margin-top:8px"></div></div>
       <div class="grid g-2">
-        <div class="card"><h3>This month's math</h3><div class="sub">How “safe to spend” is worked out</div><div id="f-math"></div></div>
+        <div class="card"><h3>This month, step by step</h3><div class="sub">How today’s number is worked out</div><div id="f-math"></div></div>
         <div class="card"><h3>Goals</h3><div class="sub">Tap a target to change it</div><div id="f-goals"></div>
           <form id="goalf" class="row" style="margin-top:10px"><input id="g-name" placeholder="New goal (e.g. NYC move fund)"><input id="g-target" placeholder="$" style="width:90px"><input id="g-due" type="date" style="width:150px"><button class="btn">Add</button></form></div>
       </div>
       <div class="grid g-2">
-        <div class="card"><h3>Life plan</h3><div class="sub">From config.toml — the forecast follows these</div><ul class="timeline" id="f-events"></ul></div>
+        <div class="card"><h3>Life plan</h3><div class="sub">Changes coming up that the forecast already accounts for</div><ul class="timeline" id="f-events"></ul></div>
         <div class="card"><h3>Savings rate</h3><div class="sub" id="f-sav-sub"></div><div class="chart"><canvas id="c-rate"></canvas></div></div>
       </div>
-      <div class="card"><h3>Month by month</h3><div class="sub">Projected — assumes your current habits continue</div><table id="f-months"></table><div class="sub" id="f-assume" style="margin-top:10px"></div></div>
+      <div class="card"><h3>Month by month</h3><div class="sub">Projected, assuming you keep spending the way you have lately</div><table id="f-months"></table><div class="sub" id="f-assume" style="margin-top:10px"></div></div>
     </section>
 
     <!-- ACTIVITY -->

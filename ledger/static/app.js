@@ -53,6 +53,7 @@ const bar = (label, data, color, extra = {}) => ({ label, data, backgroundColor:
 
 // ───────── TODAY ─────────
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const cfgPct = S => S.income ? S.savings_goal / S.income : 0;
 const NUM = {};  // last shown value per element, so numbers glide from old to new instead of jumping
 function countTo(sel, v, f = fmt) {
   const el = $(sel); if (!el) return;
@@ -112,45 +113,38 @@ async function loadToday() {
   $('#dial-cap').textContent = D.left < 0 ? 'over today' : `left of ${fmt(D.allowance)} today`;
   tickClock();
 
-  // month runway: what's spent, what's promised to bills, where today sits
-  // flexible money for the month: what's spent so far, what's held back, and what's still free (bills are already out)
-  const total = Math.max(1, S.flexible_budget), spent = Math.max(0, S.spent), bills = Math.max(0, S.hold_back || 0);
-  const daysIn = S.days_left + new Date().getDate() - 1 || 30, timeFrac = (new Date().getDate() - 1 + dayFrac()) / daysIn;
-  $('#r-spent').style.width = Math.min(100, spent / total * 100) + '%';
-  $('#r-bills').style.width = Math.min(100, bills / total * 100) + '%';
-  $('#r-now').style.left = Math.min(100, timeFrac * 100) + '%';
-  $('#runway-title').textContent = new Date().toLocaleString('en-CA', { month: 'long' });
-  $('#runway-left').innerHTML = `<b>${fmt(S.safe_to_spend)}</b> left · ${S.days_left} days`;
-  $('#runway-legend').innerHTML = `<span><i class="k-spent"></i>Spent ${fmt(spent)} of ${fmt(S.flexible_budget)} flexible</span>` +
-    (bills ? `<span><i class="k-bills"></i>Held back ${fmt(bills)}</span>` : '') + `<span><i class="k-free"></i>Still free</span><span><i class="k-now"></i>Today</span>` +
-    (S.upcoming_total ? `<span class="muted">Bills still due this month (${fmt(S.upcoming_total)}) are already set aside.</span>` : '');
+  // where this month's money goes: in → bills → savings → everyday (spent / left)
+  const monthName = new Date().toLocaleString('en-CA', { month: 'long' });
+  const inc = S.income, fixed = S.fixed_monthly, save = S.savings_set_aside || 0, every = Math.max(0, S.flexible_budget);
+  const spent = Math.max(0, S.spent), held = Math.max(0, S.hold_back || 0);
+  const leftEv = Math.max(0, S.safe_to_spend), over = Math.max(0, -S.safe_to_spend);
+  const segs = [
+    ['bills', fixed, 'Bills'], ['save', save, 'Savings'], ['held', held, 'Held for later'], ['spent', Math.min(spent, Math.max(0, every - held)), 'Spent'],
+    ['free', leftEv, 'Left to spend'], ['over', over, 'Over'],
+  ].filter(s => s[1] > 0.5);
+  const tot = Math.max(1, segs.reduce((a, s) => a + s[1], 0));
+  $('#flow-title').textContent = `${monthName}: ${fmt(inc)} coming in`;
+  $('#flow-left').innerHTML = S.safe_to_spend >= 0 ? `<b>${fmt(S.safe_to_spend)}</b> left · ${S.days_left} days` : `<b class="neg">${fmt(-S.safe_to_spend)} over</b>`;
+  $('#flow-bar').innerHTML = segs.map(s => `<i class="f-${s[0]}" style="flex:${s[1] / tot}" title="${s[2]}: ${fmt(s[1])}"></i>`).join('');
+  $('#flow-legend').innerHTML = segs.map(s => `<span><i class="f-${s[0]}"></i>${s[2]} <b>${fmt(s[1])}</b></span>`).join('');
+  // the one sentence that matters most this month
+  const dad = (S.fixed_items || []).find(i => i.merchant === 'Family Support');
+  const gap = Math.round((S.usual_everyday || 0) - (S.room_after_bills || 0));
+  let note = '';
+  if (gap > 0) note = `After bills you have ${fmt(S.room_after_bills)} for everyday spending, but you usually spend about ${fmt(S.usual_everyday)}.` +
+    (dad && dad.amount > 0 ? ` With Dad at ${fmt(dad.amount)}, breaking even needs about ${fmt(gap)} less: ${fmt(Math.max(0, dad.amount - gap))} to Dad, or ${fmt(gap)} less everyday spending.` : '');
+  else note = `After bills you have ${fmt(S.room_after_bills)} for everyday spending, about ${fmt(-gap)} more than you usually spend.`;
+  if ((S.savings_goal || 0) > 0 && save < S.savings_goal) note += ` Your ${Math.round(cfgPct(S) * 100)}% savings goal (${fmt(S.savings_goal)}) doesn't fit this month${save > 0 ? `; ${fmt(save)} of it does` : ''}.`;
+  $('#flow-note').textContent = note;
+  // plain-language math, open on demand
+  $('#t-math').innerHTML = mathHTML(S);
 
-  // quiet stats
-  const C = T.cash;
-  if (C.complete) { countTo('#t-cash', C.cash); $('#t-cash-sub').textContent = C.investments ? `plus ${fmt(C.investments)} invested` : (C.approx ? 'approximate' : 'across your accounts'); }
-  else { $('#t-cash').textContent = 'Not set'; NUM['#t-cash'] = null; $('#t-cash-sub').innerHTML = `<a class="link" data-go="system">Add balances</a>`; }
-  const F = T.forecast;
-  $('#t-fc-k').textContent = 'By ' + new Date(F.horizon + 'T12:00').toLocaleDateString('en-CA', { month: 'short', year: 'numeric' });
-  if (F.relative) { countTo('#t-fc', F.end, v => (v >= 0 ? '+' : '') + fmt(v)); $('#t-fc-sub').textContent = 'change at current habits'; }
-  else { countTo('#t-fc', F.low.balance); $('#t-fc-sub').textContent = `lowest point, ${dshort(F.low.date)}`; }
-  const K = T.kpis;
-  countTo('#t-net', K.net, v => (v >= 0 ? '+' : '') + fmt(v));
-  $('#t-net-sub').textContent = `${fmt(K.income)} in, ${fmt(K.spent_gross ?? K.expenses)} out`;
-  $('#t-net').classList.toggle('neg', K.net < 0);
-
-  // the river: projected cash to the horizon
-  const ser = F.series;
-  $('#t-river-sub').textContent = F.relative ? `Change from today if things carry on like the last few months. Add balances to see real amounts.`
-    : (F.below_buffer ? `Dips under your ${fmt(F.buffer)} cushion around ${dshort(F.below_buffer)}.` : `Stays above your ${fmt(F.buffer)} cushion all the way to ${dshort(F.horizon)}.`);
-  const ctx = $('#c-spark').getContext('2d'), grad = ctx.createLinearGradient(0, 0, 0, 240);
-  grad.addColorStop(0, css('--ice') + '55'); grad.addColorStop(1, css('--ice') + '00');
-  chart('c-spark', { type: 'line', data: { labels: ser.map(p => p[0]), datasets: [
-    { label: 'Cash', data: ser.map(p => p[1]), borderColor: css('--ice'), backgroundColor: grad, fill: 'origin', borderWidth: 2.5, pointRadius: 0, tension: .35 },
-    ...(F.relative ? [] : [{ label: 'Cushion', data: ser.map(() => F.buffer), borderColor: css('--brass'), borderDash: [5, 5], borderWidth: 1.2, pointRadius: 0 }])] },
-    options: opts({ animation: reduceMotion ? false : { duration: 900, easing: 'easeOutCubic' },
-      scales: { x: { grid: { display: false }, border: { display: false }, ticks: { color: css('--text-muted'), maxTicksLimit: 7, callback: function (v) { const l = this.getLabelForValue(v); return new Date(l + 'T12:00').toLocaleDateString('en-CA', { month: 'short' }); } } },
-        y: { beginAtZero: false, grid: { color: css('--grid') }, border: { display: false }, ticks: { color: css('--text-muted'), callback: v => fmt(v), maxTicksLimit: 5 } } },
-      plugins: { legend: { display: false }, tooltip: opts().plugins.tooltip } }) });
+  // the long view, in one line
+  const F = T.forecast, C = T.cash;
+  const by = new Date(F.horizon + 'T12:00').toLocaleDateString('en-CA', { month: 'short', year: 'numeric' });
+  $('#outlook').innerHTML = F.relative
+    ? `<span class="o-k">If nothing changes</span><span class="o-v ${F.end < 0 ? 'neg' : ''}">${F.end < 0 ? fmt(-F.end) + ' short' : fmt(F.end) + ' ahead'}</span><span class="o-f">by ${by}, counting from today. Your pay ends Dec 31. Add your balances to see real amounts.</span><span class="o-go">See the plan</span>`
+    : `<span class="o-k">Cash on hand</span><span class="o-v">${fmt(C.cash)}</span><span class="o-f">${F.below_buffer ? `Dips under your cushion around ${dshort(F.below_buffer)}` : `Stays above your cushion to ${by}`}</span><span class="o-go">See the plan</span>`;
 
   // live stream: newest first; anything that arrived since the last refresh glows briefly
   const ids = new Set(T.recent.map(t => t.id));
@@ -162,14 +156,14 @@ async function loadToday() {
   SEEN_TX = ids;
 
   // next three weeks: a strip of days, then the list
-  const days = [...Array(21)].map((_, i) => { const d = new Date(); d.setDate(d.getDate() + i); return d.toISOString().slice(0, 10); });
+  const days = [...Array(28)].map((_, i) => { const d = new Date(); d.setDate(d.getDate() + i); return d.toISOString().slice(0, 10); });
   const byDay = {}; T.upcoming.forEach(u => (byDay[u.date] ||= []).push(u));
   $('#t-strip').innerHTML = days.map((d, i) => { const u = byDay[d] || [], dt = new Date(d + 'T12:00');
     return `<div class="sd ${i === 0 ? 'today' : ''} ${dt.getDay() === 0 || dt.getDay() === 6 ? 'we' : ''}" title="${dshort(d)}${u.length ? ': ' + esc(u.map(x => x.label).join(', ')) : ''}">
       <span class="sd-n">${dt.getDate()}</span><span class="sd-dots">${u.slice(0, 3).map(x => `<i class="${x.kind}"></i>`).join('')}</span></div>`; }).join('');
-  $('#t-upcoming').innerHTML = T.upcoming.length ? T.upcoming.slice(0, 7).map(u => `<li><span class="when">${dshort(u.date)}</span>
+  $('#t-upcoming').innerHTML = T.upcoming.length ? T.upcoming.filter(u => u.kind !== 'pay' || u === T.upcoming.find(x => x.kind === 'pay')).slice(0, 7).map(u => `<li><span class="when">${dshort(u.date)}</span>
     <span><i class="dotk ${u.kind}"></i>${esc(u.label)}</span>
-    <span class="amt ${u.amount > 0 ? 'pos' : ''}">${u.amount == null ? '' : (u.amount > 0 ? '+' : '') + fmt(u.amount)}</span></li>`).join('') : '<li class="muted">Nothing due in the next three weeks.</li>';
+    <span class="amt ${u.amount > 0 ? 'pos' : ''}">${u.amount == null ? '' : (u.amount > 0 ? '+' : '') + fmt(u.amount)}</span></li>`).join('') : '<li class="muted">Nothing due in the next four weeks.</li>';
 
   // what Ledger noticed: messages + its own actions, newest first
   const items = [...T.messages.map(m => ({ at: m.created, ic: 'msg', html: `<b>${esc(m.title.replace(/^\p{Extended_Pictographic}\s*/u, ''))}</b><div class="sec">${esc(m.body.length > 200 ? m.body.slice(0, 200) + '…' : m.body)}</div>` })),
@@ -181,6 +175,23 @@ async function loadToday() {
 }
 setInterval(() => { if (!document.hidden && page === 'today') tickClock(); }, 30000);
 $('#askchips') && $$('#askchips button').forEach(b => b.onclick = () => { $('#askq').value = b.textContent; $('#askf').requestSubmit(); });
+
+function mathHTML(S) {
+  const monthName = new Date().toLocaleString('en-CA', { month: 'long' }), inc = S.income, save = S.savings_set_aside || 0, spent = Math.max(0, S.spent);
+  const pd = S.pay_detail;
+  const row = (l, v, cls = '') => `<div class="${cls}"><span>${l}</span><span>${v}</span></div>`;
+  return     row(pd ? `Pay: ${pd.received_count} paycheque${pd.received_count === 1 ? '' : 's'} so far + ${pd.coming.length} still to come (${fmt(pd.typical)} each)` : 'Pay (average month)', fmt(S.pay_monthly)) +
+    (S.other_income_monthly ? row('Other income you can count on (benefits, cashback)', fmt(S.other_income_monthly)) : '') +
+    row('Money coming in', fmt(inc), 'total') +
+    (S.fixed_items || []).filter(i => i.amount > 0).map(i => row(`− ${esc(i.merchant === 'Family Support' ? 'Dad' : i.merchant)} <span class="muted">(${esc(i.how || '')})</span>`, fmt(i.amount), 'ind')).join('') +
+    (save ? row(`− Savings`, fmt(save), 'ind') : '') +
+    row('For everyday spending', fmt(S.flexible_budget), 'total') +
+    row('− Spent so far this month (food, gas, shopping…)', fmt(spent), 'ind') +
+    (S.hold_back ? row(`− Held back: ${esc(S.hold_reason)}`, fmt(S.hold_back), 'ind') : '') +
+    row(`Left for the rest of ${monthName}`, fmt(S.safe_to_spend), 'total') +
+    row(`÷ ${S.days_left} days left`, `${fmt(S.per_day)} a day`, 'ind');
+
+}
 
 function renderGoals(sel, G, compact) {
   if (!G.goals.length) { $(sel).innerHTML = '<div class="empty">No goals yet.</div>'; return; }
@@ -207,7 +218,8 @@ async function loadSpending() {
     ['Income', fmt(k.income), `${k.txns} transactions`],
     ['Kept', fmt(k.net), k.savings_rate == null ? 'no income yet' : k.savings_rate > 1 ? 'others paid back more than you spent so far' : `${Math.round(k.savings_rate * 100)}% savings rate`],
     (() => { const ref = k.projected_expenses ?? k.expenses, d = ref - k.avg_expenses_3m;
-      return ['vs usual', (d >= 0 ? '+' : '') + fmt(d), k.projected_expenses != null ? 'where this month is heading vs your 3-month average' : 'vs your 3-month average']; })()]
+      return [k.projected_expenses != null ? 'Heading for' : 'Compared with usual', fmt(ref),
+        `${Math.abs(d) < 25 ? 'about your usual' : fmt(Math.abs(d)) + (d > 0 ? ' more' : ' less') + ' than usual'} (${fmt(k.avg_expenses_3m)})`]; })()]
     .map(([l, v, f]) => `<div class="card kpi"><div class="label">${l}</div><div class="val">${v}</div><div class="foot">${f}</div></div>`).join('');
   // budgets
   const B = D.budgets.filter(b => b.spent > 0 || !b.auto);
@@ -224,7 +236,7 @@ async function loadSpending() {
   heatmap(D.heat, D.heat_from);
   // monthly
   const ms = D.monthly.map(x => mname(x.month));
-  chart('c-monthly', { type: 'bar', data: { labels: ms, datasets: [bar('Income', D.monthly.map(x => x.income), css('--s1')), bar('Spending', D.monthly.map(x => x.expenses), css('--s2'))] },
+  chart('c-monthly', { type: 'bar', data: { labels: ms, datasets: [bar('In', D.monthly.map(x => x.income), css('--moss')), bar('Out', D.monthly.map(x => x.expenses), css('--ember'))] },
     options: opts({ onClick: (e, els) => { if (els[0]) { $('#month').value = D.monthly[els[0].index].month; load(); } } }) });
   // pace
   const P = D.daily; $('#pace-prev').textContent = mname(P.prev_month);
@@ -289,45 +301,36 @@ async function loadPlan() {
   VERSION = D.version;
   const F = D.forecast;
   $('#f-sub').textContent = F.relative ? `Change in cash from today through ${dshort(F.horizon)} (set balances on System for real numbers)` :
-    `From ${fmt(F.start)} today through ${dshort(F.horizon)} · buffer ${fmt(F.buffer)}`;
+    `From ${fmt(F.start)} today to ${dshort(F.horizon)}. The dashed line is your ${fmt(F.buffer)} cushion.`;
   const labels = F.series.map(p => p[0]);
   const markIdx = new Set(F.markers.map(m => labels.findIndex(l => l >= m.date)).filter(i => i >= 0));
   chart('c-forecast', { type: 'line', data: { labels, datasets: [
     { label: 'Projected cash', data: F.series.map(p => p[1]), borderColor: css('--s1'), backgroundColor: css('--s7'), borderWidth: 2, tension: .15,
       pointRadius: labels.map((_, i) => markIdx.has(i) ? 5 : 0), pointHoverRadius: 5, pointBackgroundColor: css('--s7') },
-    ...(F.relative ? [] : [{ label: 'Buffer', data: labels.map(() => F.buffer), borderColor: css('--text-muted'), borderDash: [5, 4], borderWidth: 1.5, pointRadius: 0 }]),
+    ...(F.relative ? [] : [{ label: 'Cushion', data: labels.map(() => F.buffer), borderColor: css('--text-muted'), borderDash: [5, 4], borderWidth: 1.5, pointRadius: 0 }]),
     ...(D.base ? [{ label: 'Without what-if', data: D.base.series.map(p => p[1]), borderColor: css('--text-muted'), borderWidth: 1.5, pointRadius: 0, tension: .15 }] : [])] },
     options: (() => { const o = opts({ scales: { x: { type: 'category', grid: { display: false }, ticks: { color: css('--text-muted'), maxTicksLimit: 10, callback: (v, i) => mname(labels[i].slice(0, 7)) } },
       y: { beginAtZero: false, grid: { color: css('--grid') }, border: { display: false }, ticks: { color: css('--text-muted'), callback: v => fmt(v) } } } });
       o.plugins.tooltip.callbacks.title = c => dshort(c[0].label);
-      o.plugins.tooltip.filter = c => c.dataset.label !== 'Buffer';
+      o.plugins.tooltip.filter = c => c.dataset.label !== 'Cushion';
       o.plugins.tooltip.callbacks.afterBody = c => F.markers.filter(m => m.date === c[0].label).map(m => '◆ ' + m.label);
       return o; })() });
   $('#c-forecast').closest('.card').querySelector('.legend').innerHTML = `<span><i style="background:var(--s1)"></i>${D.base ? 'With what-if' : 'Projected cash'}</span>` +
-    (D.base ? '<span><i style="background:var(--text-muted)"></i>Without</span>' : '') + '<span><i class="dash"></i>Buffer</span>';
-  $('#w-result').textContent = D.base ? `With this what-if: lowest ${fmt(F.low.balance)} (${dshort(F.low.date)}) vs ${fmt(D.base.low.balance)} without — ${F.low.balance >= F.buffer ? 'you stay above your buffer the whole way.' : F.low.balance >= 0 ? 'you dip into your buffer but never run out.' : `still ${fmt(-F.low.balance)} short at the low point.`}` : '';
+    (D.base ? '<span><i style="background:var(--text-muted)"></i>Without</span>' : '') + '<span><i class="dash"></i>Cushion</span>';
+  $('#w-result').textContent = D.base ? `With this what-if: lowest ${fmt(F.low.balance)} (${dshort(F.low.date)}) vs ${fmt(D.base.low.balance)} without — ${F.low.balance >= F.buffer ? 'you stay above your cushion the whole way.' : F.low.balance >= 0 ? 'you dip into your cushion but never run out.' : `still ${fmt(-F.low.balance)} short at the low point.`}` : '';
   $('#f-callouts').innerHTML = [
     ['Lowest point', fmt(F.low.balance), dshort(F.low.date)],
     ['At ' + dshort(F.horizon), fmt(F.end), F.relative ? 'net change' : 'projected cash'],
     ...(F.relative ? [['Runway', 'Needs balances', 'add them on System to see when cash runs out']]
-      : F.below_zero ? [['Runs out', dshort(F.below_zero), 'at current habits']] : F.below_buffer ? [['Under buffer', dshort(F.below_buffer), 'tighten before then']] : [['Runway', 'Covered', 'never below your buffer']]),
+      : F.below_zero ? [['Runs out', dshort(F.below_zero), 'at current habits']] : F.below_buffer ? [['Under cushion', dshort(F.below_buffer), 'tighten before then']] : [['Runway', 'Covered', 'never below your cushion']]),
     ['Everyday spending', fmt(F.assumptions.everyday_per_day * 30.4) + '/mo', 'what the forecast assumes']]
     .map(([a, b, c]) => `<div class="callout">${a}<b>${b}</b>${c}</div>`).join('');
   // math
   const S = D.safe;
-  $('#f-math').innerHTML = `<div class="math">
-    <div><span>Expected income this month</span><span>${fmt(S.income)}</span></div>
-    <div class="ind"><span>Pay ${S.pay ? `(${fmt(S.pay.typical)} every ${S.pay.every_days} days)` : ''}</span><span>${fmt(S.pay_monthly)}</span></div>
-    <div class="ind"><span>Other income (avg)</span><span>${fmt(S.other_income_monthly)}</span></div>
-    <div><span>− Savings goal (${D.goal_pct}%)</span><span>${fmt(S.savings_set_aside)}</span></div>
-    <div><span>− Fixed bills</span><span>${fmt(S.fixed_monthly)}</span></div>
-    ${S.fixed_items.map(f => `<div class="ind"><span>${esc(f.merchant)}${f.off ? ` <span class="tag">off: ${esc(f.off)}</span>` : ''}</span><span>${fmt(f.amount)}</span></div>`).join('')}
-    ${S.hold_back ? `<div><span>− Held back for later (${esc(S.hold_reason)})</span><span>${fmt(S.hold_back)}</span></div>` : ''}
-    <div><span>− Everyday spending so far</span><span>${fmt(S.spent)}</span></div>
-    <div class="total"><span>Safe to spend, rest of month</span><span>${fmt(S.safe_to_spend)}</span></div></div>`;
+  $('#f-math').innerHTML = `<div class="math">${mathHTML(S)}</div>`;
   renderGoals('#f-goals', D.goals, false);
   $('#f-events').innerHTML = [...D.events].sort((a, b) => (a.date || a.start).localeCompare(b.date || b.start)).map(e => { const d = e.date || e.start; const amt = e.amount || e.budget || e.monthly;
-    return `<li><span class="when">${dshort(d)}</span><span><i class="dotk event"></i>${esc(e.name)} <span class="tag">${esc(e.kind)}</span>${e.end ? ` <span class="muted">→ ${dshort(e.end)}</span>` : ''}</span>
+    return `<li><span class="when">${dshort(d)}</span><span><i class="dotk event"></i>${esc(e.name)} <span class="tag">${esc({ pause: 'paused', stop: 'ends', one_time: 'one-off', trip: 'trip', income: 'new income' }[e.kind] || e.kind)}</span>${e.end ? ` <span class="muted">→ ${dshort(e.end)}</span>` : ''}</span>
     <span class="amt">${amt ? fmt(amt) : (e.kind === 'one_time' || e.kind === 'income' ? '<span class="muted">set amount</span>' : '')}</span></li>`; }).join('');
   const sv = D.savings, ms = sv.months.map(x => mname(x.month));
   $('#f-sav-sub').textContent = sv.of ? `Goal ${D.goal_pct}% · hit ${sv.hit} of last ${sv.of} months · kept ${fmt(sv.saved_6m)}, invested ${fmt(sv.invested_6m)}` : `Goal ${D.goal_pct}%`;
@@ -335,7 +338,7 @@ async function loadPlan() {
     { label: 'Kept', data: sv.months.map(x => x.savings_rate == null ? null : Math.round(x.savings_rate * 100)), borderColor: css('--s3'), backgroundColor: css('--s3'), borderWidth: 2, pointRadius: 4, spanGaps: true },
     { label: 'Goal', data: ms.map(() => D.goal_pct), borderColor: css('--text-muted'), borderDash: [4, 4], borderWidth: 1.5, pointRadius: 0 }] },
     options: (() => { const o = opts(); o.scales.y.ticks.callback = v => v + '%'; o.plugins.tooltip.callbacks.label = c => ` ${c.dataset.label} ${c.parsed.y}%`; return o; })() });
-  $('#f-months').innerHTML = '<tr><th>Month</th><th class="num">In</th><th class="num">Fixed</th><th class="num">Everyday</th><th class="num">Events</th><th class="num">End cash</th></tr>' +
+  $('#f-months').innerHTML = '<tr><th>Month</th><th class="num">Money in</th><th class="num">Bills</th><th class="num">Everyday</th><th class="num">One-offs</th><th class="num">Cash after</th></tr>' +
     F.months.map(m => `<tr><td>${mname(m.month, true)}</td><td class="num pos">${fmt(m.income)}</td><td class="num">${fmt(m.fixed)}</td><td class="num">${fmt(m.flexible)}</td><td class="num">${m.events ? fmt(m.events) : '<span class="muted">—</span>'}</td><td class="num" style="font-weight:600">${fmt(m.end)}</td></tr>`).join('');
   const A = F.assumptions;
   $('#f-assume').innerHTML = `Assumes: ${A.pay ? `pay ${fmt(A.pay.amount)} every ${A.pay.every_days} days${A.pay.until ? ' until ' + dshort(A.pay.until) : ''}` : 'no regular pay detected'} ·
@@ -469,6 +472,7 @@ $('#syncbtn').onclick = async () => { const b = $('#syncbtn'); b.disabled = true
 setInterval(async () => { if (document.hidden) return; try { const v = (await api('/api/version')).version;
   if (VERSION != null && v !== VERSION) { VERSION = v; await load(); toast('Updated'); } } catch (e) { } }, 15000);
 
+document.addEventListener('toggle', e => { if (e.target.matches?.('details.more') && e.target.open) Object.values(charts).forEach(c => c.resize()); }, true);
 window.addEventListener('hashchange', () => { const h = location.hash.slice(1); if (h && h !== page && $('#p-' + h)) go(h); });
 
 (async function init() {

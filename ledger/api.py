@@ -32,17 +32,35 @@ def _version(con):
     return r["value"] if r else "0"
 
 
-def upcoming(con, cfg, days=21, today=None):
+def upcoming(con, cfg, days=28, today=None):
+    """The next four weeks: every payday (until your pay stops), bills Ledger expects, and your plan's events.
+    A bill paused or stopped by a plan event (no Dad transfer in December) isn't shown."""
     today = today or date.today()
-    end = (today + timedelta(days=days)).isoformat()
+    end = today + timedelta(days=days)
+    events = cfg["plan"].get("events", [])
+
+    def cats(e):
+        c = e.get("category")
+        return set(c) if isinstance(c, list) else {c} if c else set()
+
+    def off(cat, d):
+        for e in events:
+            if cat in cats(e) and (e.get("kind") == "stop" and d >= e["date"] or e.get("kind") == "pause" and e["start"] <= d <= e["end"]):
+                return True
+        return False
     items = [dict(date=r["next_expected"], label=r["merchant"], amount=-r["amount"], kind="bill", category=r["category"])
-             for r in ins.recurring(con) if r["active"] and r["next_expected"] and today.isoformat() <= r["next_expected"] <= end]
+             for r in ins.recurring(con) if r["active"] and r["next_expected"] and today.isoformat() <= r["next_expected"] <= end.isoformat()
+             and not off(r["category"], r["next_expected"])]
     pc = planner.pay_cycle(con, today)
-    if pc and today.isoformat() <= pc["next"] <= end:
-        items.append(dict(date=pc["next"], label=f"Paycheque ({pc['payer']})", amount=pc["typical"], kind="pay"))
-    for e in cfg["plan"].get("events", []):
+    if pc:
+        d = date.fromisoformat(pc["next"])
+        while d <= end:
+            if d >= today and not off("Salary", d.isoformat()):
+                items.append(dict(date=d.isoformat(), label="Paycheque", amount=pc["typical"], kind="pay"))
+            d += timedelta(days=pc["every_days"])
+    for e in events:
         d = e.get("date") or e.get("start")
-        if d and today.isoformat() <= d <= end:
+        if d and today.isoformat() <= d <= end.isoformat():
             items.append(dict(date=d, label=e["name"], amount=float(e.get("amount") or 0) or None, kind="event"))
     return sorted(items, key=lambda x: x["date"])
 
@@ -82,17 +100,17 @@ def today_numbers(con, s):
 
 
 def _headline(s, fc, k):
-    nice = ins.nice
+    """One short, plain sentence: how this month is going. Detail lives one tap away."""
+    left, day = s["safe_to_spend"], s["per_day"]
     if s["structural_gap"] < 0:
-        return (f"Your fixed bills are ${-s['structural_gap']:,.0f}/mo more than your income — you're running on savings.", "bad")
-    if s["safe_to_spend"] < 0:
-        return (f"You're ${-s['safe_to_spend']:,.0f} past what's safe this month. Keep the rest of the month light.", "bad")
-    if s.get("plan_gap"):
-        return (f"This month is fine, but cash runs ${s['plan_gap']:,.0f} short by {nice(fc['low']['date'])} at current habits — "
-                "Ledger is holding some back and the Plan tab shows how to close it.", "warn")
-    if s["per_day"] < 15:
-        return (f"Tight month: about ${s['per_day']:,.0f}/day left for everyday spending.", "warn")
-    return (f"You're on track — ${s['safe_to_spend']:,.0f} left to spend this month, about ${s['per_day']:,.0f}/day.", "good")
+        return (f"Your bills are ${-s['structural_gap']:,.0f} more than what's coming in this month.", "bad")
+    if left < 0:
+        return (f"You're ${-left:,.0f} over for this month. Keep the rest of it light.", "bad")
+    if s.get("usual_everyday") and s.get("room_after_bills", 0) < s["usual_everyday"]:
+        return (f"${left:,.0f} left this month, about ${day:,.0f} a day. That's tighter than you usually spend.", "warn")
+    if day < 15:
+        return (f"Tight month: about ${day:,.0f} a day left.", "warn")
+    return (f"You're on track: ${left:,.0f} left this month, about ${day:,.0f} a day.", "good")
 
 
 def _health_summary(con):

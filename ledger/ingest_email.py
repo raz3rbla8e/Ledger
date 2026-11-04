@@ -457,9 +457,13 @@ def _sync_inbox(con, cfg, cz, ib, pw, stats, log):
 
 # ───────────────────────── real-time: IMAP IDLE ─────────────────────────
 
+IDLE_SECONDS = 20 * 60  # re-issue IDLE this often (Gmail drops idle connections after ~30 min)
+
+
 def idle_forever(ib, pw, on_new_mail, log=print, stop=None):
     """Hold an IMAP IDLE connection: Gmail pushes '* n EXISTS' the moment mail arrives → on_new_mail().
-    Reconnects with backoff; re-issues IDLE every 20 minutes (Gmail drops idle connections after ~30)."""
+    After IDLE_SECONDS of silence it starts a fresh connection: once a read on an SSL socket has timed out,
+    Python won't read from it again ("cannot read from timed out object"), so the socket is never reused."""
     import socket
     import time
     backoff = 5
@@ -473,18 +477,18 @@ def idle_forever(ib, pw, on_new_mail, log=print, stop=None):
                 M.send(tag + b" IDLE\r\n")
                 if not M.readline().startswith(b"+"):
                     raise imaplib.IMAP4.error("server refused IDLE")
-                M.sock.settimeout(30)
-                started, got = time.time(), False
-                while time.time() - started < 20 * 60 and not (stop and stop.is_set()):
-                    try:
+                M.sock.settimeout(IDLE_SECONDS)
+                got = False
+                try:
+                    while True:
                         line = M.readline()
-                    except (socket.timeout, TimeoutError):
-                        continue
-                    if not line:
-                        raise ConnectionError("connection closed")
-                    if b"EXISTS" in line:
-                        got = True
-                        break
+                        if not line:
+                            raise ConnectionError("connection closed")
+                        if b"EXISTS" in line:
+                            got = True
+                            break
+                except (socket.timeout, TimeoutError):
+                    break  # quiet period over → reconnect (normal, not logged)
                 M.sock.settimeout(60)
                 M.send(b"DONE\r\n")
                 while True:  # drain until our tagged completion
@@ -500,7 +504,7 @@ def idle_forever(ib, pw, on_new_mail, log=print, stop=None):
         finally:
             try:
                 if M:
-                    M.logout()
+                    M.shutdown()
             except Exception:
                 pass
 

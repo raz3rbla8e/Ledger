@@ -16,4 +16,5 @@ jobs:
       - run: python -m tests.test_pipeline
       - run: python -m tests.test_v3
       - run: python -m tests.test_v4
+      - run: python -m tests.test_idle
       - run: python tests/test_keychain_windows.py

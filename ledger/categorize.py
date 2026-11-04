@@ -216,7 +216,7 @@ class Categorizer:
         if cp:
             sent, total = self._history(cp, tx.get("id"))
             company = re.search(r"\b(INC|LTD|CORP|LLC|ULC|LLP|CO|LIMITED|CORPORATION)\b\.?$|\d{5,}", cp.upper())
-            if company:  # a business, not a person: "LPT REALTY ULC" is rent, "SPEEDY GLASS INC." car repair
+            if company:  # a business, not a person: "ACME REALTY ULC" is rent, "SOME GLASS INC." car repair
                 for rx, cat, d in _COMPILED:
                     if (d == IN and amt < 0) or (d == OUT and amt > 0) or self.cat_kind.get(cat) == "transfer":
                         continue

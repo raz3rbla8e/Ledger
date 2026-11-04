@@ -6,11 +6,12 @@
 <title>Ledger</title>
 <link rel="manifest" href="/static/manifest.json">
 <link rel="icon" href="/static/icon.svg">
-<meta name="theme-color" content="#111110" media="(prefers-color-scheme: dark)">
-<meta name="theme-color" content="#f4f4f2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e1524" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#eef2f7" media="(prefers-color-scheme: light)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="apple-touch-icon" href="/static/icon.svg">
+<link rel="preload" href="/static/fonts/bricolage.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -35,52 +36,70 @@
   <main id="main">
     <!-- TODAY -->
     <section id="p-today" class="page">
-      <div class="headline" id="headline"><span class="hl-icon" id="hl-icon"></span><span id="hl-text">Loading…</span></div>
-      <div class="grid g-hero">
-        <div class="card hero">
-          <div class="eyebrow">Today you can spend</div>
-          <div class="mega" id="t-today">—</div>
-          <div class="sub" id="t-left"></div>
-          <div class="meter" id="t-meter" title=""><div class="fill" id="t-fill"></div><div class="tick" id="t-tick"></div></div>
-          <div class="meter-legend"><span id="t-used"></span><span id="t-time"></span></div>
+      <header class="topline">
+        <p class="headline" id="headline"><span id="hl-text">Loading…</span></p>
+        <span class="clock" id="clock"></span>
+      </header>
+
+      <div class="hero" id="hero">
+        <div class="dial-wrap" aria-hidden="true">
+          <svg class="dial" viewBox="0 0 260 260">
+            <defs>
+              <linearGradient id="g-ice" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:var(--ice-hi)"/><stop offset="1" style="stop-color:var(--ice)"/></linearGradient>
+            </defs>
+            <circle class="dial-track" cx="130" cy="130" r="104"/>
+            <circle class="dial-money" id="dial-money" cx="130" cy="130" r="104" pathLength="1000" stroke="url(#g-ice)" transform="rotate(-90 130 130)"/>
+            <circle class="dial-time-track" cx="130" cy="130" r="123"/>
+            <circle class="dial-time" id="dial-time" cx="130" cy="130" r="123" pathLength="1000" transform="rotate(-90 130 130)"/>
+            <g id="dial-ticks"></g>
+            <circle class="dial-hand" id="dial-hand" cx="130" cy="7" r="4.5"/>
+          </svg>
+          <div class="dial-center">
+            <div class="dial-num" id="t-today">—</div>
+            <div class="dial-cap" id="dial-cap">left today</div>
+          </div>
         </div>
-        <div class="card" id="cashcard">
-          <div class="eyebrow">Cash on hand</div>
-          <div class="big" id="t-cash">—</div>
-          <div class="sub" id="t-cash-sub"></div>
-          <div id="t-accts" class="mini-list"></div>
-        </div>
-        <div class="card">
-          <div class="eyebrow">Where you're headed</div>
-          <div class="big" id="t-fc">—</div>
-          <div class="sub" id="t-fc-sub"></div>
-          <div class="spark"><canvas id="c-spark"></canvas></div>
+        <div class="hero-body">
+          <p class="hero-line" id="hero-line"></p>
+          <div class="runway">
+            <div class="runway-head"><span id="runway-title">This month</span><span id="runway-left"></span></div>
+            <div class="runway-bar" id="runway"><i class="r-spent" id="r-spent"></i><i class="r-bills" id="r-bills"></i><i class="r-now" id="r-now"></i></div>
+            <div class="runway-legend" id="runway-legend"></div>
+          </div>
+          <div class="stats">
+            <div class="stat" id="cashcard"><span class="stat-k">Cash on hand</span><span class="stat-v" id="t-cash">—</span><span class="stat-f" id="t-cash-sub"></span></div>
+            <div class="stat"><span class="stat-k" id="t-fc-k">By Sept 2027</span><span class="stat-v" id="t-fc">—</span><span class="stat-f" id="t-fc-sub"></span></div>
+            <div class="stat"><span class="stat-k">This month</span><span class="stat-v" id="t-net">—</span><span class="stat-f" id="t-net-sub"></span></div>
+          </div>
         </div>
       </div>
-      <div class="grid g-2">
+
+      <div class="grid g-live">
+        <div class="card stream-card">
+          <div class="row-between"><h3><span class="live-dot" id="pulse2"></span>As it happens</h3><a class="link" data-go="activity">Everything</a></div>
+          <ul class="stream" id="t-stream"></ul>
+        </div>
         <div class="card">
-          <h3>Coming up</h3><div class="sub">Next 3 weeks — bills, pay, and plan events</div>
+          <h3>Next three weeks</h3>
+          <div class="strip" id="t-strip"></div>
           <ul class="timeline" id="t-upcoming"></ul>
         </div>
-        <div class="card">
-          <h3>Your assistant</h3><div class="sub">What it noticed and did on its own</div>
-          <ul class="feed" id="t-feed"></ul>
-        </div>
       </div>
-      <div class="grid g-2">
-        <div class="card">
-          <h3>Ask</h3><div class="sub">“can I afford $300?” · “how much on food since september?” · “/plan”</div>
-          <form id="askf" class="row"><input id="askq" placeholder="Ask about your money…"><button class="btn primary">Ask</button></form>
+
+      <div class="card river-card">
+        <div class="row-between"><div><h3>Where your cash is headed</h3><div class="sub" id="t-river-sub"></div></div><a class="link" data-go="plan">Plan</a></div>
+        <div class="chart river"><canvas id="c-spark"></canvas></div>
+      </div>
+
+      <div class="grid g-3b">
+        <div class="card"><h3>What Ledger noticed</h3><ul class="feed" id="t-feed"></ul></div>
+        <div class="card"><h3>Goals</h3><div id="t-goals"></div></div>
+        <div class="card ask-card">
+          <h3>Ask</h3>
+          <form id="askf" class="ask"><input id="askq" placeholder="Can I afford $300 this weekend?" autocomplete="off"><button class="btn primary">Ask</button></form>
+          <div class="chips" id="askchips"><button type="button">How much on food this month?</button><button type="button">What's due this week?</button><button type="button">/plan</button></div>
           <div class="answer" id="askout"></div>
         </div>
-        <div class="card">
-          <h3>Goals</h3><div class="sub" id="t-goals-sub">Funded in priority order from cash above your buffer</div>
-          <div id="t-goals"></div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="row-between"><div><h3>Latest</h3><div class="sub">Most recent transactions</div></div><a class="link" data-go="activity">All activity →</a></div>
-        <table class="tx" id="t-recent"></table>
       </div>
     </section>
 

@@ -56,7 +56,7 @@ def today_page(con, cfg, month):
     last = con.execute("SELECT at FROM sync_log ORDER BY id DESC LIMIT 1").fetchone()
     status, tone = _headline(s, fc, k)
     return dict(
-        version=_version(con), headline=status, tone=tone, safe=s, kpis=k, cash=pos,
+        version=_version(con), headline=status, tone=tone, safe=s, kpis=k, cash=pos, today=today_numbers(con, s),
         forecast=dict(low=fc["low"], below_buffer=fc["below_buffer"], end=fc["end"], relative=fc["relative"], horizon=fc["horizon"],
                       series=fc["series"][::3], buffer=fc["buffer"], start=fc["start"]),
         upcoming=upcoming(con, cfg), goals=g,
@@ -64,11 +64,21 @@ def today_page(con, cfg, month):
         messages=_live_messages(con),
         recent=[dict(r) for r in con.execute(
             """SELECT t.id, t.date, t.merchant, t.category, t.amount, t.kind, a.name account FROM transactions t
-               LEFT JOIN accounts a ON a.id=t.account_id ORDER BY t.date DESC, t.id DESC LIMIT 8""")],
+               LEFT JOIN accounts a ON a.id=t.account_id ORDER BY t.date DESC, t.id DESC LIMIT 12""")],
         to_review=con.execute("SELECT count(*) FROM transactions WHERE reviewed=0").fetchone()[0],
         health=_health_summary(con), last_sync=last["at"] if last else None,
         months=[r[0] for r in con.execute("SELECT DISTINCT substr(date,1,7) FROM transactions ORDER BY 1 DESC")],
     )
+
+
+def today_numbers(con, s):
+    """Today's allowance as it stood this morning, what's gone since, and what's left — for the dial and the widget."""
+    from datetime import date as _d
+    t = _d.today().isoformat()
+    spent, n = planner.spend_between(con, t, t, flexible_only=True)
+    spent = max(0.0, spent)
+    allowance = round((max(0, s["safe_to_spend"]) + spent) / max(1, s["days_left"]), 2)
+    return dict(allowance=allowance, spent=round(spent, 2), left=round(allowance - spent, 2), purchases=n)
 
 
 def _headline(s, fc, k):

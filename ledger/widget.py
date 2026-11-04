@@ -13,7 +13,7 @@ def widget_payload(con, cfg):
                  key=lambda r: r["next_expected"])[:1]
     tone = "bad" if s["safe_to_spend"] < 0 else "warn" if s.get("plan_gap") or s["per_day"] < 15 else "good"
     return {
-        "today": round(max(0, s["today_allowance"] - spent_today), 2),
+        "today": round(max(0, (max(0, s["safe_to_spend"]) + max(0, spent_today)) / max(1, s["days_left"]) - max(0, spent_today)), 2),
         "today_allowance": s["today_allowance"],
         "spent_today": spent_today,
         "left_month": s["safe_to_spend"],

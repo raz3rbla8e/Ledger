@@ -12,4 +12,4 @@ ledger = "ledger.__main__:main"
 include = ["ledger*"]
 
 [tool.setuptools.package-data]
-ledger = ["static/*"]
+ledger = ["static/*", "static/fonts/*"]

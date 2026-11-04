@@ -150,7 +150,9 @@ def make_handler(con, cfg):
                 return
             b = p.read_bytes()
             self.send_response(200)
-            self.send_header("Content-Type", mimetypes.guess_type(str(p))[0] or "application/octet-stream")
+            self.send_header("Content-Type", {".woff2": "font/woff2", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml"}.get(
+                p.suffix.lower()) or mimetypes.guess_type(str(p))[0] or "application/octet-stream")
+            self.send_header("Cache-Control", "max-age=86400" if p.suffix.lower() == ".woff2" else "no-cache")
             self.send_header("Content-Length", str(len(b)))
             self.end_headers()
             self.wfile.write(b)

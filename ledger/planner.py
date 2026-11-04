@@ -8,6 +8,53 @@ FIXED = {"Rent", "Utilities", "Internet & Phone", "Gym", "Software & AI", "Strea
          "Car Insurance", "Tuition & School", "Interest Charges"}
 
 
+def _net_by_month(con, cats, months):
+    ph = ",".join("?" * len(cats))
+    by = {}
+    for r in con.execute(f"""SELECT category, substr(date,1,7) mo, -sum(amount) s FROM transactions WHERE kind IN {SPEND_KINDS}
+                             AND category IN ({ph}) AND substr(date,1,7) IN ({",".join("?" * len(months))}) GROUP BY category, mo""",
+                         (*cats, *months)):
+        by.setdefault(r["category"], {})[r["mo"]] = r["s"]
+    return by
+
+
+def fixed_costs(con, cfg, today=None, cats=None):
+    """What each fixed category (rent, Dad, phone, subscriptions…) normally costs per month, NET of what others pay
+    you back for it (e.g. a roommate's rent share).
+    - If config.toml says it ([plan.fixed] Rent = 1050), that's the answer: what you know beats what Ledger infers.
+    - Otherwise: the median of the last 4 complete months, ignoring months with nothing in that category, so a
+      one-off month (first & last month's rent, a big catch-up transfer) can't drag the normal amount around."""
+    today = today or date.today()
+    cats = cats or FIXED
+    told = {k: float(v) for k, v in (cfg["plan"].get("fixed") or {}).items()}
+    months = _months_back(5, today.replace(day=1))[:-1]
+    by = _net_by_month(con, sorted(set(cats) | set(told)), months)
+    out = {}
+    for cat in set(by) | set(told):
+        if cat in told:
+            out[cat] = dict(amount=round(told[cat], 2), how="you set it")
+            continue
+        vals = [by[cat][m] for m in months if by[cat].get(m, 0) > 1]
+        if not vals:
+            continue
+        out[cat] = dict(amount=round(statistics.median(vals), 2),
+                        how=f"usual month (median of {len(vals)})")
+    return out
+
+
+def other_income_monthly(con, today=None):
+    """Non-salary income you can count on monthly: the median month of the last 3, after setting aside one-off
+    lumps (any single deposit of $1,000+ — OSAP, a tax return, a big refund). Those show up as what they are,
+    not as a monthly income you don't actually have."""
+    today = today or date.today()
+    prev = _months_back(4, today.replace(day=1))[:-1]
+    by = {m: 0.0 for m in prev}
+    for r in con.execute("""SELECT substr(date,1,7) mo, sum(amount) s FROM transactions WHERE kind='income' AND category!='Salary'
+                            AND amount < 1000 AND substr(date,1,7) IN (?,?,?) GROUP BY mo""", prev):
+        by[r["mo"]] = r["s"] or 0
+    return round(statistics.median(by.values()), 2)
+
+
 def pay_cycle(con, today=None):
     today = today or date.today()
     rows = con.execute(
@@ -41,28 +88,15 @@ def safe_to_spend(con, cfg, today=None):
     nd = calendar.monthrange(today.year, today.month)[1]
     end = m0 + timedelta(days=nd)
     prev = _months_back(4, m0)[:-1]
-    other = con.execute(
-        f"SELECT sum(amount) FROM transactions WHERE kind='income' AND category!='Salary' AND substr(date,1,7) IN (?,?,?)", prev).fetchone()[0] or 0
-    other_m = other / 3
+    other_m = other_income_monthly(con, today)
     if pc:
         pay_m = pc["typical"] * 30.44 / pc["every_days"]
     else:
         pay_m = (con.execute(f"SELECT sum(amount) FROM transactions WHERE category='Salary' AND substr(date,1,7) IN (?,?,?)", prev).fetchone()[0] or 0) / 3
     income = round(pay_m + other_m, 2)
-    # fixed = what your fixed categories (rent, Dad, phone, subscriptions…) normally cost per month
+    # fixed = what your fixed categories (rent, Dad, phone, subscriptions…) normally cost per month, net of paybacks
     fx = ",".join("?" * len(FIXED))
-    hist = {}
-    for r in con.execute(f"""SELECT category, substr(date,1,7) mo, -sum(amount) s FROM transactions WHERE kind IN {SPEND_KINDS}
-                             AND category IN ({fx}) AND substr(date,1,7) IN (?,?,?,?) GROUP BY category, mo""", (*FIXED, *prev, m0.strftime("%Y-%m"))):
-        hist.setdefault(r["category"], {})[r["mo"]] = r["s"]
-    items = []
-    for cat, by in hist.items():
-        past = [by[p] for p in prev if by.get(p, 0) > 1]
-        typical = statistics.median(past) if past else 0
-        now = by.get(m0.strftime("%Y-%m"), 0)
-        v = max(typical, now)
-        if v > 1:
-            items.append(dict(merchant=cat, amount=round(v, 2)))
+    items = [dict(merchant=cat, amount=v["amount"], how=v["how"]) for cat, v in fixed_costs(con, cfg, today).items() if v["amount"] > 1]
     # life events: a bill paused/stopped this month (e.g. no Dad transfer in December) isn't a fixed cost this month
     def _off(cat):
         for e in cfg["plan"].get("events", []):

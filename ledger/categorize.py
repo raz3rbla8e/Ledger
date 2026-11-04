@@ -86,6 +86,7 @@ class Categorizer:
         self.cat_kind = {r["name"]: r["kind"] for r in con.execute("SELECT name, kind FROM categories")}
         self.reload_rules()
         self.income_from = cfg["me"].get("income_when_moved_from", {}) or {}
+        self.pins = [p for p in cfg.get("pin", []) if p.get("date") and p.get("amount") is not None and p.get("category")]
         self.merchants = []
         for m in cfg.get("merchants", []):
             if m.get("match") and m.get("category"):
@@ -143,6 +144,12 @@ class Categorizer:
         cp = tx.get("counterparty")
         hay = f"{tx.get('description') or ''} | {tx.get('merchant') or ''} | {tx.get('memo') or ''}".upper()
         hay = hay + " | " + re.sub(r"\s*\*\s*", " ", hay)
+
+        # 1b. a specific transaction you explained in config.toml ([[pin]] date, amount, who, category)
+        for p in self.pins:
+            if tx.get("date") == p["date"] and abs(abs(amt) - abs(float(p["amount"]))) < 0.01 and \
+                    (not p.get("who") or p["who"].upper() in f"{cp or ''} {tx.get('merchant') or ''} {tx.get('description') or ''}".upper()):
+                return self._set(tx, p["category"], self._kind_for(p["category"], amt, p.get("kind"), bool(cp)), "rule")
 
         # 2. self / people
         if cp and self.is_me(cp):

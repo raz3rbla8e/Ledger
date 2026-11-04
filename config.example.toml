@@ -94,3 +94,14 @@ quiet_hours = "23:00-08:00"
 # match = "1234567 CANADA"
 # category = "Restaurants"
 # rename = "Burger place"
+
+# One specific transaction Ledger can't know about (it survives every re-sort):
+# [[pin]]
+# date = "2026-10-29"
+# amount = 540
+# who = "ROOMMATE NAME"
+# category = "Rent"
+
+# Fixed costs you know better than Ledger can infer (net of what others pay you back):
+# [plan.fixed]
+# Rent = 1050

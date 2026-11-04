@@ -20,23 +20,17 @@ def _cats(ev):
     return set(c) if isinstance(c, list) else {c} if c else set()
 
 
-def _typical_fixed(con, today):
-    """Per fixed category: typical monthly net amount + the day of month it usually goes out."""
+def _typical_fixed(con, today, cfg=None):
+    """Per fixed category: normal monthly net amount (shared with safe-to-spend) + the day it usually goes out."""
+    from .planner import fixed_costs
     prev = _months_back(4, today.replace(day=1))[:-1]
-    fx = ",".join("?" * len(FORECAST_FIXED))
     out = {}
-    rows = con.execute(f"""SELECT category, substr(date,1,7) mo, -sum(amount) s FROM transactions WHERE kind IN {SPEND_KINDS}
-                           AND category IN ({fx}) AND substr(date,1,7) IN (?,?,?) GROUP BY category, mo""", (*FORECAST_FIXED, *prev)).fetchall()
-    by = defaultdict(dict)
-    for r in rows:
-        by[r["category"]][r["mo"]] = r["s"]
-    for cat, mos in by.items():
-        vals = [v for v in mos.values() if v > 1]
-        if not vals:
+    for cat, v in fixed_costs(con, cfg or {"plan": {}}, today, FORECAST_FIXED).items():
+        if v["amount"] <= 1:
             continue
         days = [int(r[0][8:10]) for r in con.execute(
             "SELECT date FROM transactions WHERE category=? AND amount<0 AND date>=? ORDER BY date DESC LIMIT 6", (cat, prev[0] + "-01"))]
-        out[cat] = dict(amount=round(statistics.median(vals), 2), day=int(statistics.median(days)) if days else 1)
+        out[cat] = dict(amount=v["amount"], day=int(statistics.median(days)) if days else 1)
     return out
 
 
@@ -52,10 +46,8 @@ def _flex_daily(con, today):
 
 
 def _other_income_monthly(con, today):
-    prev = _months_back(4, today.replace(day=1))[:-1]
-    r = con.execute("SELECT COALESCE(sum(amount),0) FROM transactions WHERE kind='income' AND category NOT IN ('Salary') AND substr(date,1,7) IN (?,?,?)",
-                    prev).fetchone()[0]
-    return r / 3
+    from .planner import other_income_monthly
+    return other_income_monthly(con, today)
 
 
 def forecast(con, cfg, today=None, horizon=None, extra=None, scenario=None):
@@ -72,7 +64,7 @@ def forecast(con, cfg, today=None, horizon=None, extra=None, scenario=None):
 
     pc = pay_cycle(con, today)
     salary_stop = min([_d(e["date"]) for e in events if e.get("kind") == "stop" and "Salary" in _cats(e)] or [date.max])
-    fixed = _typical_fixed(con, today)
+    fixed = _typical_fixed(con, today, cfg)
     flex = _flex_daily(con, today)
     other_inc = _other_income_monthly(con, today)
     buffer = float(plan.get("cash_buffer", 500))

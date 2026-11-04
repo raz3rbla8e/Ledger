@@ -51,64 +51,135 @@ function chart(id, cfg) { charts[id]?.destroy(); const el = $('#' + id); if (el)
 const bar = (label, data, color, extra = {}) => ({ label, data, backgroundColor: color, borderRadius: { topLeft: 4, topRight: 4 }, borderSkipped: 'bottom', maxBarThickness: 18, categoryPercentage: .7, barPercentage: .9, ...extra });
 
 // ───────── TODAY ─────────
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const NUM = {};  // last shown value per element, so numbers glide from old to new instead of jumping
+function countTo(sel, v, f = fmt) {
+  const el = $(sel); if (!el) return;
+  const from = NUM[sel], to = v; NUM[sel] = v;
+  if (v == null || from == null || reduceMotion || from === to) { el.textContent = v == null ? '—' : f(v); return; }
+  const t0 = performance.now(), dur = 900;
+  const step = t => { const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+    el.textContent = f(from + (to - from) * e); if (k < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+// the dial: inner ring = today's money left, outer ring = how much of the day has gone (moves with the clock)
+function dialTicks() {
+  const g = $('#dial-ticks'); if (!g || g.childElementCount) return;
+  for (let h = 0; h < 24; h++) {
+    const a = (h / 24) * 2 * Math.PI - Math.PI / 2, r1 = h % 6 ? 117 : 113, r2 = 119;
+    const l = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    l.setAttribute('x1', 130 + r1 * Math.cos(a)); l.setAttribute('y1', 130 + r1 * Math.sin(a));
+    l.setAttribute('x2', 130 + r2 * Math.cos(a)); l.setAttribute('y2', 130 + r2 * Math.sin(a));
+    l.setAttribute('class', h % 6 ? 'tick' : 'tick major'); g.appendChild(l);
+  }
+}
+function dayFrac() { const n = new Date(); return (n.getHours() * 60 + n.getMinutes()) / 1440; }
+function tickClock() {
+  const f = dayFrac(), a = f * 2 * Math.PI - Math.PI / 2;
+  $('#dial-time')?.style.setProperty('stroke-dasharray', `${f * 1000} 1000`);
+  const h = $('#dial-hand'); if (h) { h.setAttribute('cx', 130 + 123 * Math.cos(a)); h.setAttribute('cy', 130 + 123 * Math.sin(a)); }
+  const now = new Date();
+  const c = $('#clock'); if (c) c.textContent = now.toLocaleDateString('en-CA', { weekday: 'long', month: 'long', day: 'numeric' }) + ', ' +
+    now.toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit' });
+  if (TODAY) heroLine(TODAY);
+}
+let TODAY = null, SEEN_TX = null;
+function heroLine(T) {
+  const d = T.today, pct = Math.round(dayFrac() * 100);
+  let s;
+  if (d.allowance <= 0) s = `There's no room left in this month's flexible money, so today is a no-spend day if you can manage it.`;
+  else if (d.spent <= 0) s = `Nothing spent yet today. You have ${fmt(d.allowance)} to work with, and ${pct}% of the day is gone.`;
+  else if (d.left >= 0) s = `${fmt(d.spent)} spent of today's ${fmt(d.allowance)}${d.purchases ? ` across ${d.purchases} purchase${d.purchases > 1 ? 's' : ''}` : ''}. ` +
+    (d.spent / d.allowance > dayFrac() + .15 ? `You're ahead of the day: ${pct}% of it is gone.` : `Right on pace with ${pct}% of the day gone.`);
+  else s = `${fmt(-d.left)} over today's ${fmt(d.allowance)}. It comes out of the rest of the month: tomorrow's number will be a little smaller.`;
+  $('#hero-line').textContent = s;
+}
 async function loadToday() {
   const T = await api('/api/today?month=' + month());
-  VERSION = T.version; fillMonths(T.months); setSync(T.last_sync); badges(T.to_review, T.health);
-  const S = T.safe;
-  const hl = $('#headline'); hl.className = 'headline ' + T.tone;
-  $('#hl-icon').textContent = T.tone === 'good' ? '✓' : '!'; $('#hl-text').textContent = T.headline;
-  $('#t-today').textContent = fmt(S.today_allowance);
-  $('#t-left').innerHTML = `${fmt(S.safe_to_spend)} left for the rest of ${new Date().toLocaleString('en-CA', { month: 'long' })} · ${S.days_left} days` +
-    (S.hold_back ? `<br><span class="muted">Holding back ${fmt(S.hold_back)} this month — ${esc(S.hold_reason)}</span>` : '');
-  const budget = Math.max(1, S.flexible_budget - (S.hold_back || 0)), used = Math.max(0, S.spent) / budget;
-  const timeFrac = 1 - S.days_left / (S.days_left + new Date().getDate() - 1 || 1);
-  $('#t-fill').style.width = Math.min(100, used * 100) + '%'; $('#t-fill').classList.toggle('over', used > 1);
-  $('#t-tick').style.left = Math.min(100, timeFrac * 100) + '%';
-  $('#t-used').textContent = `${fmt(S.spent)} of ${fmt(budget)} flexible spent`;
-  $('#t-time').textContent = `${Math.round(timeFrac * 100)}% of the month gone`;
+  TODAY = T; VERSION = T.version; fillMonths(T.months); setSync(T.last_sync); badges(T.to_review, T.health);
+  const S = T.safe, D = T.today;
+  $('#headline').className = 'headline ' + T.tone; $('#hl-text').textContent = T.headline;
 
-  // cash
+  // dial
+  dialTicks();
+  const frac = D.allowance > 0 ? Math.max(0, Math.min(1, D.left / D.allowance)) : 0;
+  const m = $('#dial-money');
+  m.classList.toggle('over', D.left < 0);
+  m.style.strokeDasharray = `${(D.left < 0 ? 1 : frac) * 1000} 1000`;
+  $('#hero').classList.toggle('over', D.left < 0);
+  countTo('#t-today', Math.abs(D.left));
+  $('#dial-cap').textContent = D.left < 0 ? 'over today' : `left of ${fmt(D.allowance)} today`;
+  tickClock();
+
+  // month runway: what's spent, what's promised to bills, where today sits
+  // flexible money for the month: what's spent so far, what's held back, and what's still free (bills are already out)
+  const total = Math.max(1, S.flexible_budget), spent = Math.max(0, S.spent), bills = Math.max(0, S.hold_back || 0);
+  const daysIn = S.days_left + new Date().getDate() - 1 || 30, timeFrac = (new Date().getDate() - 1 + dayFrac()) / daysIn;
+  $('#r-spent').style.width = Math.min(100, spent / total * 100) + '%';
+  $('#r-bills').style.width = Math.min(100, bills / total * 100) + '%';
+  $('#r-now').style.left = Math.min(100, timeFrac * 100) + '%';
+  $('#runway-title').textContent = new Date().toLocaleString('en-CA', { month: 'long' });
+  $('#runway-left').innerHTML = `<b>${fmt(S.safe_to_spend)}</b> left · ${S.days_left} days`;
+  $('#runway-legend').innerHTML = `<span><i class="k-spent"></i>Spent ${fmt(spent)} of ${fmt(S.flexible_budget)} flexible</span>` +
+    (bills ? `<span><i class="k-bills"></i>Held back ${fmt(bills)}</span>` : '') + `<span><i class="k-free"></i>Still free</span><span><i class="k-now"></i>Today</span>` +
+    (S.upcoming_total ? `<span class="muted">Bills still due this month (${fmt(S.upcoming_total)}) are already set aside.</span>` : '');
+
+  // quiet stats
   const C = T.cash;
-  if (C.complete) {
-    $('#t-cash').textContent = fmt(C.cash);
-    $('#t-cash-sub').textContent = (C.approx ? 'Approximate · ' : '') + (C.investments ? `+ ${fmt(C.investments)} invested` : 'Across your accounts');
-    $('#t-accts').innerHTML = C.accounts.filter(a => a.balance != null).map(a => `<div><span>${esc(a.name)}</span><span>${fmt(a.balance)}</span></div>`).join('');
-  } else {
-    $('#t-cash').textContent = 'Not set';
-    $('#t-cash-sub').innerHTML = `Type your balances once and Ledger tracks them from there — unlocks runway, goals and “can I afford it”.`;
-    $('#t-accts').innerHTML = `<a class="link" data-go="system">Set balances (30 seconds) →</a>`;
-  }
-  // forecast
+  if (C.complete) { countTo('#t-cash', C.cash); $('#t-cash-sub').textContent = C.investments ? `plus ${fmt(C.investments)} invested` : (C.approx ? 'approximate' : 'across your accounts'); }
+  else { $('#t-cash').textContent = 'Not set'; NUM['#t-cash'] = null; $('#t-cash-sub').innerHTML = `<a class="link" data-go="system">Add balances</a>`; }
   const F = T.forecast;
-  if (F.relative) {
-    $('#t-fc').textContent = (F.end >= 0 ? '+' : '') + fmt(F.end);
-    $('#t-fc-sub').textContent = `Net change by ${dshort(F.horizon)} at current habits (set balances for real numbers)`;
-  } else {
-    $('#t-fc').textContent = fmt(F.low.balance);
-    $('#t-fc-sub').textContent = `Lowest point, ${dshort(F.low.date)} · ` + (F.below_buffer ? `dips under buffer ${dshort(F.below_buffer)}` : `stays above your ${fmt(F.buffer)} buffer`);
-  }
-  chart('c-spark', { type: 'line', data: { labels: F.series.map(p => p[0]), datasets: [
-    { label: 'Cash', data: F.series.map(p => p[1]), borderColor: css('--s1'), borderWidth: 2, pointRadius: 0, tension: .2, fill: false },
-    ...(F.relative ? [] : [{ label: 'Buffer', data: F.series.map(() => F.buffer), borderColor: css('--text-muted'), borderDash: [4, 4], borderWidth: 1, pointRadius: 0 }])] },
-    options: opts({ scales: { x: { display: false }, y: { display: false, beginAtZero: false } }, plugins: { legend: { display: false }, tooltip: { enabled: false } } }) });
+  $('#t-fc-k').textContent = 'By ' + new Date(F.horizon + 'T12:00').toLocaleDateString('en-CA', { month: 'short', year: 'numeric' });
+  if (F.relative) { countTo('#t-fc', F.end, v => (v >= 0 ? '+' : '') + fmt(v)); $('#t-fc-sub').textContent = 'change at current habits'; }
+  else { countTo('#t-fc', F.low.balance); $('#t-fc-sub').textContent = `lowest point, ${dshort(F.low.date)}`; }
+  const K = T.kpis;
+  countTo('#t-net', K.net, v => (v >= 0 ? '+' : '') + fmt(v));
+  $('#t-net-sub').textContent = `${fmt(K.income)} in, ${fmt(K.spent_gross ?? K.expenses)} out`;
+  $('#t-net').classList.toggle('neg', K.net < 0);
 
-  // upcoming
-  $('#t-upcoming').innerHTML = T.upcoming.length ? T.upcoming.map(u => `<li><span class="when">${dshort(u.date)}</span>
-    <span><i class="dotk ${u.kind}"></i>${esc(u.label)}${u.category ? ` <span class="tag">${esc(u.category)}</span>` : ''}</span>
-    <span class="amt ${u.amount > 0 ? 'pos' : ''}">${u.amount == null ? '' : (u.amount > 0 ? '+' : '') + fmt(u.amount)}</span></li>`).join('') : '<li class="muted">Nothing scheduled.</li>';
+  // the river: projected cash to the horizon
+  const ser = F.series;
+  $('#t-river-sub').textContent = F.relative ? `Change from today if things carry on like the last few months. Add balances to see real amounts.`
+    : (F.below_buffer ? `Dips under your ${fmt(F.buffer)} cushion around ${dshort(F.below_buffer)}.` : `Stays above your ${fmt(F.buffer)} cushion all the way to ${dshort(F.horizon)}.`);
+  const ctx = $('#c-spark').getContext('2d'), grad = ctx.createLinearGradient(0, 0, 0, 240);
+  grad.addColorStop(0, css('--ice') + '55'); grad.addColorStop(1, css('--ice') + '00');
+  chart('c-spark', { type: 'line', data: { labels: ser.map(p => p[0]), datasets: [
+    { label: 'Cash', data: ser.map(p => p[1]), borderColor: css('--ice'), backgroundColor: grad, fill: 'origin', borderWidth: 2.5, pointRadius: 0, tension: .35 },
+    ...(F.relative ? [] : [{ label: 'Cushion', data: ser.map(() => F.buffer), borderColor: css('--brass'), borderDash: [5, 5], borderWidth: 1.2, pointRadius: 0 }])] },
+    options: opts({ animation: reduceMotion ? false : { duration: 900, easing: 'easeOutCubic' },
+      scales: { x: { grid: { display: false }, border: { display: false }, ticks: { color: css('--text-muted'), maxTicksLimit: 7, callback: function (v) { const l = this.getLabelForValue(v); return new Date(l + 'T12:00').toLocaleDateString('en-CA', { month: 'short' }); } } },
+        y: { beginAtZero: false, grid: { color: css('--grid') }, border: { display: false }, ticks: { color: css('--text-muted'), callback: v => fmt(v), maxTicksLimit: 5 } } },
+      plugins: { legend: { display: false }, tooltip: opts().plugins.tooltip } }) });
 
-  // feed: messages + activity merged by time
-  const items = [...T.messages.map(m => ({ at: m.created, ic: '✉', html: `<b>${esc(m.title)}</b><div class="sec" style="white-space:pre-wrap">${esc(m.body.length > 240 ? m.body.slice(0, 240) + '…' : m.body)}</div>` })),
-    ...T.activity.map(a => ({ at: a.at, ic: { sort: '⚡', learn: '✦', import: '⇩', trip: '✈', balance: '◎', budget: '▤', applepay: '◆', auto: '⚙' }[a.kind] || '•', html: esc(a.text) }))]
-    .sort((a, b) => b.at.localeCompare(a.at)).slice(0, 9);
-  $('#t-feed').innerHTML = items.length ? items.map(i => `<li><span class="ic">${i.ic}</span><span>${i.html}<div class="t">${ago(i.at)}</div></span></li>`).join('') : '<li class="muted">Quiet so far.</li>';
+  // live stream: newest first; anything that arrived since the last refresh glows briefly
+  const ids = new Set(T.recent.map(t => t.id));
+  $('#t-stream').innerHTML = T.recent.slice(0, 8).map(t => {
+    const fresh = SEEN_TX && !SEEN_TX.has(t.id), inn = t.amount > 0;
+    return `<li class="${fresh ? 'fresh' : ''}"><span class="s-dot ${inn ? 'in' : t.kind === 'transfer' ? 'xfer' : 'out'}"></span>
+      <span class="s-main"><span class="s-name">${esc(t.merchant || '—')}</span><span class="s-meta">${esc(t.category)} · ${esc(t.account || '')}</span></span>
+      <span class="s-when">${dshort(t.date)}</span><span class="s-amt ${inn ? 'in' : ''}">${inn ? '+' : ''}${fmt2(t.amount)}</span></li>`; }).join('') || '<li class="muted">Nothing yet.</li>';
+  SEEN_TX = ids;
 
-  // goals
+  // next three weeks: a strip of days, then the list
+  const days = [...Array(21)].map((_, i) => { const d = new Date(); d.setDate(d.getDate() + i); return d.toISOString().slice(0, 10); });
+  const byDay = {}; T.upcoming.forEach(u => (byDay[u.date] ||= []).push(u));
+  $('#t-strip').innerHTML = days.map((d, i) => { const u = byDay[d] || [], dt = new Date(d + 'T12:00');
+    return `<div class="sd ${i === 0 ? 'today' : ''} ${dt.getDay() === 0 || dt.getDay() === 6 ? 'we' : ''}" title="${dshort(d)}${u.length ? ': ' + esc(u.map(x => x.label).join(', ')) : ''}">
+      <span class="sd-n">${dt.getDate()}</span><span class="sd-dots">${u.slice(0, 3).map(x => `<i class="${x.kind}"></i>`).join('')}</span></div>`; }).join('');
+  $('#t-upcoming').innerHTML = T.upcoming.length ? T.upcoming.slice(0, 7).map(u => `<li><span class="when">${dshort(u.date)}</span>
+    <span><i class="dotk ${u.kind}"></i>${esc(u.label)}</span>
+    <span class="amt ${u.amount > 0 ? 'pos' : ''}">${u.amount == null ? '' : (u.amount > 0 ? '+' : '') + fmt(u.amount)}</span></li>`).join('') : '<li class="muted">Nothing due in the next three weeks.</li>';
+
+  // what Ledger noticed: messages + its own actions, newest first
+  const items = [...T.messages.map(m => ({ at: m.created, ic: 'msg', html: `<b>${esc(m.title.replace(/^\p{Extended_Pictographic}\s*/u, ''))}</b><div class="sec">${esc(m.body.length > 200 ? m.body.slice(0, 200) + '…' : m.body)}</div>` })),
+    ...T.activity.map(a => ({ at: a.at, ic: a.kind, html: esc(a.text) }))]
+    .sort((a, b) => b.at.localeCompare(a.at)).slice(0, 7);
+  $('#t-feed').innerHTML = items.length ? items.map(i => `<li><span class="ic ic-${esc(i.ic)}"></span><span>${i.html}<div class="t">${ago(i.at)}</div></span></li>`).join('') : '<li class="muted">Quiet so far.</li>';
+
   renderGoals('#t-goals', T.goals, true);
-  // recent
-  $('#t-recent').innerHTML = T.recent.map(t => `<tr><td>${dshort(t.date)}</td><td>${esc(t.merchant)}</td><td><span class="tag">${esc(t.category)}</span></td>
-    <td class="acct sec" style="font-size:12px">${esc(t.account || '')}</td><td class="num ${t.amount > 0 ? 'pos' : ''}">${t.amount > 0 ? '+' : ''}${fmt2(t.amount)}</td></tr>`).join('');
 }
+setInterval(() => { if (!document.hidden && page === 'today') tickClock(); }, 30000);
+$('#askchips') && $$('#askchips button').forEach(b => b.onclick = () => { $('#askq').value = b.textContent; $('#askf').requestSubmit(); });
 
 function renderGoals(sel, G, compact) {
   if (!G.goals.length) { $(sel).innerHTML = '<div class="empty">No goals yet.</div>'; return; }
@@ -382,7 +453,7 @@ async function loadSystem() {
 // ───────── shared ─────────
 function fillMonths(list) { const sel = $('#month'), cur = sel.value || thisMonth, ms = [...new Set([thisMonth, ...list])].sort().reverse();
   sel.innerHTML = ms.map(m => `<option value="${m}">${mname(m, true)}</option>`).join(''); sel.value = ms.includes(cur) ? cur : thisMonth; }
-function setSync(at) { $('#lastsync').textContent = 'Synced ' + ago(at); const stale = !at || (Date.now() - new Date(at.replace(' ', 'T') + 'Z')) > 40 * 60000; $('#pulse').classList.toggle('stale', stale); }
+function setSync(at) { $('#lastsync').textContent = 'Synced ' + ago(at); const stale = !at || (Date.now() - new Date(at.replace(' ', 'T') + 'Z')) > 40 * 60000; $('#pulse').classList.toggle('stale', stale); $('#pulse2')?.classList.toggle('stale', stale); }
 function badges(review, health) {
   if (review != null) { $('#rbadge').textContent = review; $('#rbadge').classList.toggle('hidden', !review); }
   if (health) $('#hbadge').classList.toggle('hidden', health.ok);

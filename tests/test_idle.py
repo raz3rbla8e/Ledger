@@ -174,3 +174,19 @@ _r = con.execute("SELECT amount, category FROM transactions WHERE description LI
 st = import_mail_export(con, cfg, Categorizer(con, cfg), _zp, lambda *a: None)
 assert st.get("new", 0) == 0  # importing twice adds nothing
 print("mail export OK")
+
+# ── pins, told fixed costs, one-off lumps ──
+from ledger import planner
+cfg["pin"] = [{"date": "2026-10-29", "amount": 540, "who": "ROOMIE", "category": "Rent"}]
+t = Categorizer(con, cfg).categorize({"date": "2026-10-29", "amount": 540.0, "counterparty": "ROOMIE", "description": "INTERAC E-TRANSFER FROM ROOMIE"})
+assert (t["category"], t["kind"]) == ("Rent", "reimbursement"), t
+cfg["plan"]["fixed"] = {"Rent": 1050}
+assert planner.fixed_costs(con, cfg)["Rent"] == {"amount": 1050.0, "how": "you set it"}
+from datetime import date as _dd
+con.execute("DELETE FROM transactions")
+for d, a in (("2026-08-10", 90), ("2026-09-08", 2350), ("2026-09-20", 60), ("2026-10-04", 160), ("2026-10-09", 90)):
+    con.execute("INSERT INTO transactions(account_id, date, amount, description, category, kind, cat_source, source, status, reviewed) "
+                "VALUES ('x',?,?,'GOVT','Government & Benefits','income','rule','email','pending',1)", (d, a))
+con.commit()
+assert planner.other_income_monthly(con, _dd(2026, 11, 4)) == 90.0  # medians of 90, 60, 250 — the $2,350 lump is a one-off
+print("pins/fixed/lumps OK")

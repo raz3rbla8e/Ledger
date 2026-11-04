@@ -145,6 +145,7 @@ def load() -> dict:
     cfg.setdefault("accounts", {})
     cfg.setdefault("people", [])
     cfg.setdefault("merchants", [])
+    cfg.setdefault("pin", [])
     cfg.setdefault("applepay", {}).setdefault("cards", {})
     p = cfg.setdefault("plan", {})
     p.setdefault("savings_goal_pct", 20)

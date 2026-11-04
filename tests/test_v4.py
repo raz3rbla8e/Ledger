@@ -138,4 +138,22 @@ assert "can_i_afford" in names and not any(w in n for n in names for w in ("dele
 assert len(json.loads(res[3]["result"]["content"][0]["text"])) == 3
 assert "verdict" in json.loads(res[4]["result"]["content"][0]["text"])
 print("MCP OK")
+
+# ── upgrading from an older Ledger: unread-able emails get a second chance ──
+import sqlite3 as _sq
+from ledger import db as _db
+old = os.path.join(tmp, "old.db")
+oc = _sq.connect(old)
+oc.executescript("CREATE TABLE seen_emails (msg_id TEXT PRIMARY KEY, parsed INTEGER, seen_at TEXT);"
+                 "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);"
+                 "INSERT INTO seen_emails VALUES ('<a>',0,'x'),('<b>',2,'x');"
+                 "INSERT INTO meta VALUES ('email_last_sync:me@x.com','2026-11-02T19:05:05');")
+oc.commit(); oc.close()
+nc = _db.connect(old)
+assert [r[0] for r in nc.execute("SELECT msg_id FROM seen_emails")] == ["<b>"]
+assert not nc.execute("SELECT 1 FROM meta WHERE key LIKE 'email_last_sync:%'").fetchone()
+nc.execute("INSERT INTO seen_emails(msg_id, parsed) VALUES ('<c>', 0)"); nc.commit(); nc.close()
+nc = _db.connect(old)  # runs once only
+assert nc.execute("SELECT count(*) FROM seen_emails").fetchone()[0] == 2
+print("upgrade OK")
 print("ALL V4 TESTS PASSED")

@@ -111,6 +111,17 @@ def _migrate(con):
         cols = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
         if col not in cols:
             con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
+    # Upgrading from an older Ledger: emails it couldn't read were marked "seen" and would be skipped forever.
+    # Forget those (nothing was stored from them) and rescan from backfill_since so today's parsers get a go.
+    # Already-imported emails are still skipped by Message-ID, so nothing is downloaded or counted twice.
+    ver = con.execute("SELECT value FROM meta WHERE key='schema'").fetchone()
+    if not ver or int(ver[0]) < 4:
+        had_data = con.execute("SELECT 1 FROM seen_emails LIMIT 1").fetchone()
+        if had_data:
+            con.execute("DELETE FROM seen_emails WHERE parsed=0")
+            con.execute("DELETE FROM meta WHERE key LIKE 'email_last_sync:%' OR key LIKE 'email_uid:%'")
+        con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema', '4')")
+        con.commit()
     have = {r[0] for r in con.execute("SELECT name FROM categories")}
     extra = [("Shared Costs", "Housing", "expense"), ("Parking & Tolls", "Transport", "expense"), ("Line of Credit", "Transfers", "transfer"),
              ("Debt Repayment", "People & Giving", "expense"), ("Trip Spending", "Travel", "expense")]

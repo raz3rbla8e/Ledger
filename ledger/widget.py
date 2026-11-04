@@ -6,6 +6,7 @@ from .insights import nice, recurring
 
 
 def widget_payload(con, cfg):
+    pp = planner.pay_period(con, cfg)
     s = planner.safe_to_spend(con, cfg)
     t = date.today().isoformat()
     spent_today, _ = planner.spend_between(con, t, t, flexible_only=True)
@@ -13,6 +14,8 @@ def widget_payload(con, cfg):
                  key=lambda r: r["next_expected"])[:1]
     tone = "bad" if s["safe_to_spend"] < 0 else "warn" if s.get("plan_gap") or s["per_day"] < 15 else "good"
     return {
+        "free_until_payday": pp["left"], "per_day_until_payday": pp["per_day"], "next_payday": pp["next"] if pp["next_is_pay"] else None,
+        "days_to_payday": pp["days_left"],
         "today": round(max(0, (max(0, s["safe_to_spend"]) + max(0, spent_today)) / max(1, s["days_left"]) - max(0, spent_today)), 2),
         "today_allowance": s["today_allowance"],
         "spent_today": spent_today,

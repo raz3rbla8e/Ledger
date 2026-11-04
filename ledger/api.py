@@ -16,6 +16,8 @@ def _live_messages(con):
     out, brief_seen = [], False
     for r in con.execute("SELECT key, title, body, created, sent_at, channels FROM outbox ORDER BY created DESC LIMIT 20"):
         k = r["key"] or ""
+        if k.startswith(("goal:", "fcbuf:")):  # balance-based; you plan from paycheques
+            continue
         if k.startswith("unparsed:") and (not unread or k != f"unparsed:{unread}"):
             continue
         if k.startswith("brief:"):
@@ -71,10 +73,12 @@ def today_page(con, cfg, month):
     k = ins.kpis(con, month)
     pos = cash_position(con)
     g = goals_status(con, cfg, fc, s)
+    pp = planner.pay_period(con, cfg)
     last = con.execute("SELECT at FROM sync_log ORDER BY id DESC LIMIT 1").fetchone()
-    status, tone = _headline(s, fc, k)
+    status, tone = pay_headline(pp)
     return dict(
         version=_version(con), headline=status, tone=tone, safe=s, kpis=k, cash=pos, today=today_numbers(con, s),
+        period=pp, bills=planner.bill_list(con, cfg), history=planner.pay_history(con, cfg), lever=planner.dad_lever(con, cfg, pp),
         forecast=dict(low=fc["low"], below_buffer=fc["below_buffer"], end=fc["end"], relative=fc["relative"], horizon=fc["horizon"],
                       series=fc["series"][::3], buffer=fc["buffer"], start=fc["start"]),
         upcoming=upcoming(con, cfg), goals=g,
@@ -82,7 +86,7 @@ def today_page(con, cfg, month):
         messages=_live_messages(con),
         recent=[dict(r) for r in con.execute(
             """SELECT t.id, t.date, t.merchant, t.category, t.amount, t.kind, a.name account FROM transactions t
-               LEFT JOIN accounts a ON a.id=t.account_id ORDER BY t.date DESC, t.id DESC LIMIT 12""")],
+               LEFT JOIN accounts a ON a.id=t.account_id ORDER BY t.date DESC, t.id DESC LIMIT 24""")],
         to_review=con.execute("SELECT count(*) FROM transactions WHERE reviewed=0").fetchone()[0],
         health=_health_summary(con), last_sync=last["at"] if last else None,
         months=[r[0] for r in con.execute("SELECT DISTINCT substr(date,1,7) FROM transactions ORDER BY 1 DESC")],
@@ -97,6 +101,23 @@ def today_numbers(con, s):
     spent = max(0.0, spent)
     allowance = round((max(0, s["safe_to_spend"]) + spent) / max(1, s["days_left"]), 2)
     return dict(allowance=allowance, spent=round(spent, 2), left=round(allowance - spent, 2), purchases=n)
+
+
+def pay_headline(pp):
+    """One plain sentence about this pay."""
+    left, day = pp["left"], pp["per_day"]
+    until = "payday" if pp["next_is_pay"] else "the end of the month" if pp["mode"] == "month" else "the next stretch"
+    if pp["free"] < 0:
+        return (f"This pay doesn't cover its share of the bills: {_m(-pp['free'])} short before you spend anything.", "bad")
+    if left < 0:
+        return (f"You're {_m(-left)} past what this pay leaves you. Keep it light until {until}.", "bad")
+    if pp["usual_day"] and day < pp["usual_day"] * 0.75:
+        return (f"{_m(left)} until {until}, about {_m(day)} a day. Tighter than you usually spend.", "warn")
+    return (f"{_m(left)} free until {until}, about {_m(day)} a day.", "good")
+
+
+def _m(v):
+    return f"${v:,.0f}"
 
 
 def _headline(s, fc, k):
@@ -160,8 +181,13 @@ def plan_page(con, cfg, q=None):
     s = planner.safe_to_spend(con, cfg)
     return dict(version=_version(con), forecast=dict(fc, series=fc["series"][::2]), scenario=sc,
                 base=dict(series=base["series"][::2], low=base["low"], end=base["end"]) if base else None, goals=goals_status(con, cfg, fc, s),
-                savings=planner.savings(con, cfg), safe=s, events=cfg["plan"].get("events", []), goal_pct=cfg["plan"]["savings_goal_pct"],
+                savings=planner.savings(con, cfg), safe=s, period=planner.pay_period(con, cfg), events=cfg["plan"].get("events", []), goal_pct=cfg["plan"]["savings_goal_pct"],
                 cash=cash_position(con))
+
+
+def bills_page(con, cfg):
+    pp = planner.pay_period(con, cfg)
+    return dict(version=_version(con), bills=planner.bill_list(con, cfg), period=pp, lever=planner.dad_lever(con, cfg, pp))
 
 
 def quality(con, cfg):

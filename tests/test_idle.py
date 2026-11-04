@@ -202,3 +202,26 @@ s_ = planner.safe_to_spend(con, cfg, _dd(2026, 11, 4))
 assert s_["pay_monthly"] == round(992.89 * 4, 2), s_["pay_detail"]          # Nov 4 landed + Nov 11, 18, 25
 assert s_["pay_detail"]["coming"] == ["2026-11-11", "2026-11-18", "2026-11-25"]
 print("paydays OK")
+
+# ── paycheque to paycheque: this pay carries its share of the monthly bills; the rest is free until next payday ──
+cfg["plan"]["fixed"] = {"Rent": 1050, "Family Support": 2000}
+cfg["plan"]["events"] = [{"name": "Co-op ends", "kind": "stop", "date": "2026-12-31", "category": "Salary"},
+                         {"name": "No transfer in December", "kind": "pause", "start": "2026-12-01", "end": "2026-12-31", "category": "Family Support"}]
+for d, a, c in (("2026-11-05", -40.0, "Groceries"), ("2026-11-06", -25.0, "Restaurants"), ("2026-11-06", -2000.0, "Family Support")):
+    con.execute("INSERT INTO transactions(account_id, date, amount, description, merchant, category, kind, cat_source, source, status, reviewed) "
+                "VALUES ('x',?,?,'X','X',?,'expense','default','email','pending',1)", (d, a, c))
+con.commit()
+pp = planner.pay_period(con, cfg, _dd(2026, 11, 6))
+assert (pp["start"], pp["next"], pp["length"], pp["mode"]) == ("2026-11-04", "2026-11-11", 7, "pay"), pp
+assert pp["pay"] == 992.89 and pp["spent"] == 65.0                         # Dad's transfer is a bill, not everyday spending
+assert abs(pp["bills"] - 3050 * 7 / 30.44) < 0.01
+assert abs(pp["left"] - (992.89 - 3050 * 7 / 30.44 - 65)) < 0.01 and pp["days_left"] == 5
+dad = [b for b in planner.bill_list(con, cfg, _dd(2026, 11, 6)) if b["category"] == "Family Support"][0]
+assert dad["status"] == "paid" and dad["name"] == "Dad"
+pd = planner.pay_period(con, cfg, _dd(2026, 12, 10))                       # Dad paused in December → smaller share per pay
+assert "Family Support" not in pd["bill_cats"]
+pj = planner.pay_period(con, cfg, _dd(2027, 1, 20))                        # co-op over: no paycheque coming → the month
+assert pj["mode"] == "month" and not pj["next_is_pay"] and pj["start"] == "2027-01-01"
+h = planner.pay_history(con, cfg, _dd(2026, 11, 6))
+assert [x["start"] for x in h] == ["2026-10-14", "2026-10-21", "2026-10-28"]
+print("pay periods OK")

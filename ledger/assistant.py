@@ -63,35 +63,24 @@ def builtin(con, cfg, text):
                 "• how much on food this month?\n• uber eats since september\n• can I afford $200?\n"
                 "• /today — what you can spend today\n• /cash — balances\n• /plan — forecast to Sept 2027\n• /goals\n• /safe — safe to spend this month\n• /week /month — reports\n• /bills — what's due\n• /subs — subscriptions\n• /budget")
     if t.startswith("/safe") or "safe to spend" in t or "afford" in t or "how much can i" in t or t.startswith("/today"):
-        s = planner.safe_to_spend(con, cfg)
+        pp = planner.pay_period(con, cfg)
+        until = f"payday ({nice(pp['next'], False)})" if pp["next_is_pay"] else f"{nice(pp['next'], False)}"
         m = re.search(r"\$?\s?(\d[\d,]*(?:\.\d+)?)", t)
         head = ""
         if m and "afford" in t:
-            from .forecast import affordability
             x = float(m.group(1).replace(",", ""))
-            a = affordability(con, cfg, x)
-            month_ok = x <= s["safe_to_spend"]
-            if a["relative"]:
-                head = (f"{'Yes' if month_ok else 'Not this month'} — {money0(x)} {'fits in' if month_ok else 'is more than'} what's left this month "
-                        f"({money0(s['safe_to_spend'])}). Set your balances once and I can check it against the whole plan to Sept 2027.\n\n")
+            left = pp["left"]
+            if x <= left - pp["usual_day"] * max(0, pp["days_left"] - 1):
+                head = f"Yes. {money0(x)} fits: you'd still have {money0(left - x)} until {until}, enough for your usual spending.\n\n"
+            elif x <= left:
+                head = (f"It fits, but it's tight: {money0(x)} leaves {money0(left - x)} for the {pp['days_left']} days until {until} "
+                        f"(~{money0((left - x) / max(1, pp['days_left']))}/day; you usually spend {money0(pp['usual_day'])}/day).\n\n")
             else:
-                v = a["verdict"]
-                head = {"yes": f"Yes. {money0(x)} is fine — your lowest point before {nice(a['low_after']['date'])} would still be {money0(a['low_after']['balance'])}.",
-                        "tight": f"Technically yes, but it's tight: your cash would bottom out at {money0(a['low_after']['balance'])} on {nice(a['low_after']['date'])} (buffer {money0(a['buffer'])}).",
-                        "only_by_dipping": f"Only by eating your buffer — you'd bottom out at {money0(a['low_after']['balance'])} on {nice(a['low_after']['date'])}.",
-                        "no": f"No. That puts you {money0(-a['low_after']['balance'])} in the hole around {nice(a['low_after']['date'])}.",
-                        "already_short": (f"Careful — your plan is already short: cash bottoms out at {money0(a['low_before']['balance'])} around "
-                                          f"{nice(a['low_before']['date'])} (before any new purchases). {money0(x)} makes that {money0(a['low_after']['balance'])}. "
-                                          + ("It fits this month's flexible money, but it's money you'll want later." if month_ok else "I'd skip it."))}[v]
-                if not month_ok and v in ("yes", "tight"):
-                    head += f" (It's more than this month's flexible money, {money0(s['safe_to_spend'])}, so it comes out of savings.)"
-                head += "\n\n"
-        fixed = "\n".join(f"  • {f['merchant']} {money0(f['amount'])}" + (f" (off: {f['off']})" if f.get("off") else "") for f in s["fixed_items"][:9]) or "  • none detected yet"
-        gap = (f"\n\n⚠️ Fixed bills are {money0(-s['structural_gap'])}/mo more than expected income — that comes out of savings." if s["structural_gap"] < 0 else "")
-        hold = f"\nHolding back {money0(s['hold_back'])}/mo because the {s['hold_reason']}." if s.get("hold_back") else ""
-        return (head + f"Today: {money0(s['today_allowance'])}. Rest of the month: {money0(s['safe_to_spend'])} (~{money0(s['per_day'])}/day for {s['days_left']} days)\n\n"
-                f"Expected income {money0(s['income'])}/mo − save {money0(s['savings_set_aside'])} − fixed bills {money0(s['fixed_monthly'])} "
-                f"= {money0(s['flexible_budget'])} flexible; spent {money0(s['spent'])} so far.{hold}\n\nFixed bills:\n{fixed}{gap}")
+                head = f"Not from this pay. You have {money0(max(0, left))} free until {until}, so {money0(x)} would eat into the next paycheque.\n\n"
+        bills = "\n".join(f"  • {('Dad' if c == 'Family Support' else c)} {money0(v)}/mo" for c, v in sorted(pp["bill_cats"].items(), key=lambda kv: -kv[1])) or "  • none yet"
+        return (head + f"Free until {until}: {money0(pp['left'])} (~{money0(pp['per_day'])}/day for {pp['days_left']} days).\n\n"
+                f"This pay: {money0(pp['money_in'])} in − {money0(pp['bills'])} share of bills = {money0(pp['free'])} free; "
+                f"{money0(pp['spent'])} spent since.\n\nMonthly bills:\n{bills}")
     if t.startswith("/cash") or "balance" in t or "how much do i have" in t:
         from .balances import cash_position
         p = cash_position(con)
@@ -125,12 +114,29 @@ def builtin(con, cfg, text):
         return "\n".join(f"• {r['merchant']}: {money(r['amount'])} {r['cadence']} → {money0(r['yearly_cost'])}/yr" for r in subs) + \
                f"\nTotal {money0(sum(r['yearly_cost'] for r in subs))}/yr" if subs else "No recurring charges detected yet."
     if t.startswith("/bills") or "due" in t or "bills" in t:
-        nxt = [r for r in ins.recurring(con) if r["active"] and r["next_expected"] and r["next_expected"] <= (today + timedelta(days=14)).isoformat()]
-        return "Next 14 days:\n" + "\n".join(f"• {r['next_expected'][5:]} {r['merchant']} {money(r['amount'])}" for r in sorted(nxt, key=lambda r: r["next_expected"])) if nxt else "Nothing due in the next 2 weeks."
+        pp = planner.pay_period(con, cfg)
+        bl = planner.bill_list(con, cfg)
+        before = pp["due"]
+        out = []
+        if pp["next_is_pay"]:
+            out.append(f"Before payday ({nice(pp['next'], False)}): " + (", ".join(f"{b['name']} {money0(b['amount'])} ({nice(b['due'], False)})" for b in before) or "nothing."))
+        on = [b for b in bl if b["status"] != "off"]
+        out.append(f"This month: {money0(sum(min(b['paid'], b['amount']) for b in on))} of {money0(sum(b['amount'] for b in on))} gone out.")
+        out += [f"{'✓' if b['status'] == 'paid' else '•'} {b['name']} {money0(b['amount'])}" +
+                (f" (paid {nice(b['paid_on'], False)})" if b["status"] == "paid" else f" (usually {nice(b['due'], False)})" if b["due"] else "") for b in on]
+        return "\n".join(out)
     if t.startswith("/budget") or "budget" in t:
         bs = planner.budgets(con, cfg)
         return "This month:\n" + "\n".join(f"{'🚨' if b['status']=='over' else '🔥' if b['status']=='hot' else '•'} {b['category']}: {money0(b['spent'])} / {money0(b['budget'])}" for b in bs[:15])
     # spend questions
+    if re.search(r"gambl|betting|\bbets?\b|casino", t):
+        s, e, label = _range(t, today) if re.search(r"today|yesterday|week|month|year|since|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec", t) \
+            else (date(2000, 1, 1), today, "since your records start")
+        r = con.execute("""SELECT COALESCE(sum(CASE WHEN amount<0 THEN -amount END),0) o, COALESCE(sum(CASE WHEN amount>0 THEN amount END),0) i, count(*) n
+                           FROM transactions WHERE category='Gambling' AND date BETWEEN ? AND ?""", (s.isoformat(), e.isoformat())).fetchone()
+        net = r["i"] - r["o"]
+        return (f"Gambling {label}: sent {money0(r['o'])}, took out {money0(r['i'])} ({r['n']} transfers). "
+                + (f"Net: up {money0(net)}." if net >= 0 else f"Net: down {money0(-net)}."))
     if re.search(r"how much|spent|spend|total", t):
         s, e, label = _range(t, today)
         cat = None

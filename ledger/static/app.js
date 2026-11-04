@@ -25,11 +25,13 @@ function go(p) {
   page = p;
   $$('#nav a, #tabbar a').forEach(a => a.classList.toggle('on', a.dataset.p === p));
   $$('main .page').forEach(s => s.classList.toggle('hidden', s.id !== 'p-' + p));
+  document.body.className = 'p-' + p;
   location.hash = p;
   window.scrollTo(0, 0);
   return load();
 }
 $$('#nav a, #tabbar a').forEach(a => a.onclick = () => go(a.dataset.p));
+addEventListener('scroll', () => $('.top').classList.toggle('scrolled', scrollY > 4), { passive: true });
 document.addEventListener('click', e => { const g = e.target.closest('[data-go]'); if (g) go(g.dataset.go); });
 $('#month').onchange = () => load();
 const load = () => ({ today: loadToday, spending: loadSpending, plan: loadPlan, activity: loadActivity, subs: loadSubs, system: loadSystem })[page]();
@@ -51,159 +53,199 @@ function opts(extra = {}) {
 function chart(id, cfg) { charts[id]?.destroy(); const el = $('#' + id); if (el) charts[id] = new Chart(el, cfg); }
 const bar = (label, data, color, extra = {}) => ({ label, data, backgroundColor: color, borderRadius: { topLeft: 4, topRight: 4 }, borderSkipped: 'bottom', maxBarThickness: 18, categoryPercentage: .7, barPercentage: .9, ...extra });
 
-// ───────── TODAY ─────────
+// ───────── NOW: paycheque to paycheque ─────────
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const cfgPct = S => S.income ? S.savings_goal / S.income : 0;
 const NUM = {};  // last shown value per element, so numbers glide from old to new instead of jumping
-function countTo(sel, v, f = fmt) {
+function countTo(sel, v, f = fmt, html = false) {
   const el = $(sel); if (!el) return;
+  const put = x => html ? el.innerHTML = x : el.textContent = x;
   const from = NUM[sel], to = v; NUM[sel] = v;
-  if (v == null || from == null || reduceMotion || from === to) { el.textContent = v == null ? '—' : f(v); return; }
-  const t0 = performance.now(), dur = 900;
+  if (v == null || from == null || reduceMotion || from === to) { put(v == null ? '—' : f(v)); return; }
+  const t0 = performance.now(), dur = 1100;
   const step = t => { const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3);
-    el.textContent = f(from + (to - from) * e); if (k < 1) requestAnimationFrame(step); };
+    put(f(from + (to - from) * e)); if (k < 1) requestAnimationFrame(step); };
   requestAnimationFrame(step);
 }
-// the dial: inner ring = today's money left, outer ring = how much of the day has gone (moves with the clock)
-function dialTicks() {
-  const g = $('#dial-ticks'); if (!g || g.childElementCount) return;
-  for (let h = 0; h < 24; h++) {
-    const a = (h / 24) * 2 * Math.PI - Math.PI / 2, r1 = h % 6 ? 117 : 113, r2 = 119;
-    const l = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    l.setAttribute('x1', 130 + r1 * Math.cos(a)); l.setAttribute('y1', 130 + r1 * Math.sin(a));
-    l.setAttribute('x2', 130 + r2 * Math.cos(a)); l.setAttribute('y2', 130 + r2 * Math.sin(a));
-    l.setAttribute('class', h % 6 ? 'tick' : 'tick major'); g.appendChild(l);
-  }
+const bigMoney = v => `<span class="c">$</span>${Math.round(Math.abs(v)).toLocaleString('en-CA')}`;
+const dayName = d => new Date(d + 'T12:00').toLocaleDateString('en-CA', { weekday: 'long' });
+const dayShort = d => new Date(d + 'T12:00').toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' });
+const md = d => { const x = new Date(d + 'T12:00'); return `${x.getMonth() + 1}/${x.getDate()}`; };
+const billName = c => c === 'Family Support' ? 'Dad' : c;
+const isoToday = () => { const n = new Date(); return new Date(n - n.getTimezoneOffset() * 6e4).toISOString().slice(0, 10); };
+
+function countdown(next) {
+  const ms = new Date(next + 'T00:00') - Date.now();
+  if (ms <= 0) return 'today';
+  const m = Math.floor(ms / 6e4), h = Math.floor(m / 60), d = Math.floor(h / 24);
+  return d >= 1 ? `in ${d} d ${h % 24} h` : h >= 1 ? `in ${h} h ${m % 60} min` : `in ${m} min`;
 }
-function dayFrac() { const n = new Date(); return (n.getHours() * 60 + n.getMinutes()) / 1440; }
 function tickClock() {
-  const f = dayFrac(), a = f * 2 * Math.PI - Math.PI / 2;
-  $('#dial-time')?.style.setProperty('stroke-dasharray', `${f * 1000} 1000`);
-  const h = $('#dial-hand'); if (h) { h.setAttribute('cx', 130 + 123 * Math.cos(a)); h.setAttribute('cy', 130 + 123 * Math.sin(a)); }
   const now = new Date();
-  const c = $('#clock'); if (c) c.textContent = now.toLocaleDateString('en-CA', { weekday: 'long', month: 'long', day: 'numeric' }) + ', ' +
+  const c = $('#clock'); if (c) c.textContent = now.toLocaleDateString('en-CA', { weekday: 'long', month: 'long', day: 'numeric' }) + ' · ' +
     now.toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit' });
-  if (TODAY) heroLine(TODAY);
+  if (TODAY?.period?.next_is_pay) $('#pd-count').textContent = countdown(TODAY.period.next);
 }
+
 let TODAY = null, SEEN_TX = null;
-function heroLine(T) {
-  const d = T.today, pct = Math.round(dayFrac() * 100);
-  let s;
-  if (d.allowance <= 0) s = `There's no room left in this month's flexible money, so today is a no-spend day if you can manage it.`;
-  else if (d.spent <= 0) s = `Nothing spent yet today. You have ${fmt(d.allowance)} to work with, and ${pct}% of the day is gone.`;
-  else if (d.left >= 0) s = `${fmt(d.spent)} spent of today's ${fmt(d.allowance)}${d.purchases ? ` across ${d.purchases} purchase${d.purchases > 1 ? 's' : ''}` : ''}. ` +
-    (d.spent / d.allowance > dayFrac() + .15 ? `You're ahead of the day: ${pct}% of it is gone.` : `Right on pace with ${pct}% of the day gone.`);
-  else s = `${fmt(-d.left)} over today's ${fmt(d.allowance)}. It comes out of the rest of the month: tomorrow's number will be a little smaller.`;
-  $('#hero-line').textContent = s;
-}
 async function loadToday() {
-  const T = await api('/api/today?month=' + month());
+  const T = await api('/api/today?month=' + thisMonth);
   TODAY = T; VERSION = T.version; fillMonths(T.months); setSync(T.last_sync); badges(T.to_review, T.health);
-  const S = T.safe, D = T.today;
+  const P = T.period, F = T.forecast;
   $('#headline').className = 'headline ' + T.tone; $('#hl-text').textContent = T.headline;
 
-  // dial
-  dialTicks();
-  const frac = D.allowance > 0 ? Math.max(0, Math.min(1, D.left / D.allowance)) : 0;
-  const m = $('#dial-money');
-  m.classList.toggle('over', D.left < 0);
-  m.style.strokeDasharray = `${(D.left < 0 ? 1 : frac) * 1000} 1000`;
-  $('#hero').classList.toggle('over', D.left < 0);
-  countTo('#t-today', Math.abs(D.left));
-  $('#dial-cap').textContent = D.left < 0 ? 'over today' : `left of ${fmt(D.allowance)} today`;
-  tickClock();
+  // ── the one number: free until the next paycheque
+  const over = P.left < 0, until = P.next_is_pay ? 'payday' : P.mode === 'month' ? 'month end' : dshort(P.next);
+  $('#hero').classList.toggle('over', over);
+  $('#h-eyebrow').textContent = over ? `Past what this pay leaves` : P.mode === 'month' ? 'Left this month' : `Free until ${until}`;
+  $('#h-left').classList.toggle('neg', over);
+  countTo('#h-left', P.left, v => (v < 0 ? '−' : '') + bigMoney(v), true);
+  const usual = P.usual_day ? ` You usually spend about ${fmt(P.usual_day)} a day.` : '';
+  $('#h-sub').innerHTML = over
+    ? `You've spent <b>${fmt(-P.left)}</b> more than this pay leaves after bills. It comes out of the next one.`
+    : `About <b>${fmt(P.per_day)} a day</b> for the ${P.days_left} day${P.days_left === 1 ? '' : 's'} until ${P.next_is_pay ? dayName(P.next) + "'s pay" : until}.${usual}`;
 
-  // where this month's money goes: in → bills → savings → everyday (spent / left)
-  const monthName = new Date().toLocaleString('en-CA', { month: 'long' });
-  const inc = S.income, fixed = S.fixed_monthly, save = S.savings_set_aside || 0, every = Math.max(0, S.flexible_budget);
-  const spent = Math.max(0, S.spent), held = Math.max(0, S.hold_back || 0);
-  const leftEv = Math.max(0, S.safe_to_spend), over = Math.max(0, -S.safe_to_spend);
-  const segs = [
-    ['bills', fixed, 'Bills'], ['save', save, 'Savings'], ['held', held, 'Held for later'], ['spent', Math.min(spent, Math.max(0, every - held)), 'Spent'],
-    ['free', leftEv, 'Left to spend'], ['over', over, 'Over'],
-  ].filter(s => s[1] > 0.5);
-  const tot = Math.max(1, segs.reduce((a, s) => a + s[1], 0));
-  $('#flow-title').textContent = `${monthName}: ${fmt(inc)} coming in`;
-  $('#flow-left').innerHTML = S.safe_to_spend >= 0 ? `<b>${fmt(S.safe_to_spend)}</b> left · ${S.days_left} days` : `<b class="neg">${fmt(-S.safe_to_spend)} over</b>`;
-  $('#flow-bar').innerHTML = segs.map(s => `<i class="f-${s[0]}" style="flex:${s[1] / tot}" title="${s[2]}: ${fmt(s[1])}"></i>`).join('');
-  $('#flow-legend').innerHTML = segs.map(s => `<span><i class="f-${s[0]}"></i>${s[2]} <b>${fmt(s[1])}</b></span>`).join('');
-  // the one sentence that matters most this month
-  const dad = (S.fixed_items || []).find(i => i.merchant === 'Family Support');
-  const gap = Math.round((S.usual_everyday || 0) - (S.room_after_bills || 0));
-  let note = '';
-  if (gap > 0) note = `After bills you have ${fmt(S.room_after_bills)} for everyday spending, but you usually spend about ${fmt(S.usual_everyday)}.` +
-    (dad && dad.amount > 0 ? ` With Dad at ${fmt(dad.amount)}, breaking even needs about ${fmt(gap)} less: ${fmt(Math.max(0, dad.amount - gap))} to Dad, or ${fmt(gap)} less everyday spending.` : '');
-  else note = `After bills you have ${fmt(S.room_after_bills)} for everyday spending, about ${fmt(-gap)} more than you usually spend.`;
-  if ((S.savings_goal || 0) > 0 && save < S.savings_goal) note += ` Your ${Math.round(cfgPct(S) * 100)}% savings goal (${fmt(S.savings_goal)}) doesn't fit this month${save > 0 ? `; ${fmt(save)} of it does` : ''}.`;
-  $('#flow-note').textContent = note;
-  // plain-language math, open on demand
-  $('#t-math').innerHTML = mathHTML(S);
+  // ── payday card
+  const pd = $('#h-payday');
+  pd.classList.toggle('none', !P.next_is_pay);
+  if (P.next_is_pay) {
+    $('#pd-k').textContent = P.typical_pay ? `Next pay · ~${fmt(P.typical_pay)}` : 'Next payday';
+    $('#pd-date').textContent = dayShort(P.next);
+    $('#pd-count').textContent = countdown(P.next);
+  } else {
+    $('#pd-k').textContent = 'No paycheque coming';
+    $('#pd-date').textContent = P.pay_stops ? `Pay ended ${dshort(P.pay_stops)}` : 'No regular pay found';
+    $('#pd-count').textContent = P.mode === 'month' ? `${P.days_left} days left in the month` : '';
+  }
 
-  // the long view, in one line
-  const F = T.forecast, C = T.cash;
+  // ── where this pay goes: bills share · spent · free
+  const inn = P.money_in, bills = P.bills, spent = Math.max(0, P.spent);
+  let segs;
+  if (!over) segs = [['bills', bills, 'Bills share'], ['spent', spent, 'Spent'], ['left', P.left, 'Free']];
+  else { const b = Math.min(bills, inn); segs = [['bills', b, 'Bills share'], ['spent', Math.max(0, inn - b), 'Spent'], ['over', -P.left, 'Over']]; }
+  segs = segs.filter(x => x[1] > 0.5);
+  const tot = Math.max(1, segs.reduce((a, x) => a + x[1], 0));
+  $('#split-title').innerHTML = P.mode === 'pay'
+    ? (P.pay ? `This pay: <b>${fmt(inn)}</b> in on ${dshort(P.start)}` : `Waiting for this pay to land`)
+    : `So far this month: <b>${fmt(inn)}</b> in`;
+  $('#split-right').textContent = `Day ${Math.min(P.day, P.length)} of ${P.length}`;
+  $('#h-split').innerHTML = segs.map(x => `<i class="${x[0]}" style="flex-grow:${x[1] / tot}" title="${x[2]}: ${fmt(x[1])}"></i>`).join('');
+  $('#h-legend').innerHTML = segs.map(x => `<span><i class="${x[0]}"></i>${x[2]} <b>${fmt(x[1])}</b></span>`).join('');
+
+  // ── day by day until payday
+  const today = isoToday(), days = [...P.days];
+  if (P.next_is_pay) days.push({ date: P.next, pay: true });
+  const evenPace = Math.max(0, P.free) / P.length, ahead = Math.max(0, P.per_day);
+  const top = Math.max(1, ...days.map(d => d.spent || 0), evenPace, ahead) * 1.12;
+  const el = $('#h-days'); el.style.setProperty('--n', days.length); el.style.gap = days.length > 20 ? '3px' : '';
+  el.innerHTML = days.map(d => {
+    const lbl = days.length > 20 ? (new Date(d.date + 'T12:00').getDate()) : new Date(d.date + 'T12:00').toLocaleDateString('en-CA', { weekday: 'narrow' });
+    if (d.pay) return `<div class="day pay" title="Payday · ${dayShort(d.date)}"><div class="col"></div><span class="lbl">${lbl}</span></div>`;
+    const fut = d.date > today, now = d.date === today;
+    const bar = fut ? '' : `<div class="bar ${d.spent <= evenPace ? 'ok' : ''}" style="height:${(d.spent / top * 100).toFixed(1)}%"></div>`;
+    const ghost = fut && ahead > 0 ? `<div class="ghost" style="height:${(ahead / top * 100).toFixed(1)}%"></div>` : '';
+    return `<div class="day ${fut ? 'future' : ''} ${now ? 'today' : ''}" title="${dayShort(d.date)}: ${fut ? 'up to ' + fmt(ahead) : fmt2(d.spent) + ' spent'}">
+      ${!fut && d.spent > 0 ? `<span class="amt">${fmt(d.spent)}</span>` : ''}<div class="col">${bar}${ghost}</div><span class="lbl">${lbl}</span></div>`;
+  }).join('');
+  $('#days-l').innerHTML = `<b>${fmt(spent)}</b> spent since payday`;
+  $('#days-r').innerHTML = P.left > 0 ? `<b>${fmt(ahead)}</b>/day keeps you even` : `Nothing left to spread`;
+  $('#t-math').innerHTML = periodMath(P);
+
+  // ── the long view, one line
   const by = new Date(F.horizon + 'T12:00').toLocaleDateString('en-CA', { month: 'short', year: 'numeric' });
-  $('#outlook').innerHTML = F.relative
-    ? `<span class="o-k">If nothing changes</span><span class="o-v ${F.end < 0 ? 'neg' : ''}">${F.end < 0 ? fmt(-F.end) + ' short' : fmt(F.end) + ' ahead'}</span><span class="o-f">by ${by}, counting from today. Your pay ends Dec 31. Add your balances to see real amounts.</span><span class="o-go">See the plan</span>`
-    : `<span class="o-k">Cash on hand</span><span class="o-v">${fmt(C.cash)}</span><span class="o-f">${F.below_buffer ? `Dips under your cushion around ${dshort(F.below_buffer)}` : `Stays above your cushion to ${by}`}</span><span class="o-go">See the plan</span>`;
+  let paysLeft = 0;
+  if (P.pay_stops && P.every_days) { let d = new Date(P.next + 'T12:00'); const stop = new Date(P.pay_stops + 'T12:00');
+    while (d <= stop) { paysLeft++; d.setDate(d.getDate() + P.every_days); } }
+  const stopTxt = P.pay_stops && P.pay_stops >= today ? `Pay ends <b>${dshort(P.pay_stops)}</b>: ${paysLeft} payday${paysLeft === 1 ? '' : 's'} left. ` : '';
+  const endTxt = F.relative
+    ? (F.end < 0 ? `If nothing changes, you'll be <b class="neg">${fmt(-F.end)} short</b> by ${by}.` : `If nothing changes, you'll be <b>${fmt(F.end)} ahead</b> by ${by}.`)
+    : `Lowest point ahead: <b>${fmt(F.low.balance)}</b> around ${dshort(F.low.date)}.`;
+  $('#ahead').innerHTML = `<span>${stopTxt}${endTxt}</span><span class="go">Plan</span>`;
 
-  // live stream: newest first; anything that arrived since the last refresh glows briefly
+  renderBills('#t-bills', '#billbar', '#bills-sum', '#t-lever', T.bills, P, T.lever);
+  renderHistory(T.history);
+
+  // ── latest: newest first; anything new since the last refresh glows
   const ids = new Set(T.recent.map(t => t.id));
-  $('#t-stream').innerHTML = T.recent.slice(0, 8).map(t => {
-    const fresh = SEEN_TX && !SEEN_TX.has(t.id), inn = t.amount > 0;
-    return `<li class="${fresh ? 'fresh' : ''}"><span class="s-dot ${inn ? 'in' : t.kind === 'transfer' ? 'xfer' : 'out'}"></span>
-      <span class="s-main"><span class="s-name">${esc(t.merchant || '—')}</span><span class="s-meta">${esc(t.category)} · ${esc(t.account || '')}</span></span>
-      <span class="s-when">${dshort(t.date)}</span><span class="s-amt ${inn ? 'in' : ''}">${inn ? '+' : ''}${fmt2(t.amount)}</span></li>`; }).join('') || '<li class="muted">Nothing yet.</li>';
+  $('#t-stream').innerHTML = T.recent.filter(t => t.kind !== 'transfer').slice(0, 7).map(t => {
+    const fresh = SEEN_TX && !SEEN_TX.has(t.id), inn = t.amount > 0, x = t.kind === 'transfer';
+    const nm = t.merchant || '—';
+    return `<li class="${fresh ? 'fresh' : ''}"><span class="s-ic ${inn ? 'in' : x ? 'xfer' : ''}">${esc((nm.match(/[A-Za-z0-9]/) || ['·'])[0].toUpperCase())}</span>
+      <span class="s-main"><span class="s-name">${esc(nm)}</span><span class="s-meta">${esc(t.category)} · ${dshort(t.date)}</span></span>
+      <span class="s-amt ${inn ? 'in' : ''}">${inn ? '+' : ''}${fmt2(t.amount)}</span></li>`; }).join('') || '<li class="muted">Nothing yet.</li>';
   SEEN_TX = ids;
 
-  // next three weeks: a strip of days, then the list
-  const days = [...Array(28)].map((_, i) => { const d = new Date(); d.setDate(d.getDate() + i); return d.toISOString().slice(0, 10); });
-  const byDay = {}; T.upcoming.forEach(u => (byDay[u.date] ||= []).push(u));
-  $('#t-strip').innerHTML = days.map((d, i) => { const u = byDay[d] || [], dt = new Date(d + 'T12:00');
-    return `<div class="sd ${i === 0 ? 'today' : ''} ${dt.getDay() === 0 || dt.getDay() === 6 ? 'we' : ''}" title="${dshort(d)}${u.length ? ': ' + esc(u.map(x => x.label).join(', ')) : ''}">
-      <span class="sd-n">${dt.getDate()}</span><span class="sd-dots">${u.slice(0, 3).map(x => `<i class="${x.kind}"></i>`).join('')}</span></div>`; }).join('');
-  $('#t-upcoming').innerHTML = T.upcoming.length ? T.upcoming.filter(u => u.kind !== 'pay' || u === T.upcoming.find(x => x.kind === 'pay')).slice(0, 7).map(u => `<li><span class="when">${dshort(u.date)}</span>
-    <span><i class="dotk ${u.kind}"></i>${esc(u.label)}</span>
-    <span class="amt ${u.amount > 0 ? 'pos' : ''}">${u.amount == null ? '' : (u.amount > 0 ? '+' : '') + fmt(u.amount)}</span></li>`).join('') : '<li class="muted">Nothing due in the next four weeks.</li>';
-
-  // what Ledger noticed: messages + its own actions, newest first
-  const items = [...T.messages.map(m => ({ at: m.created, ic: 'msg', html: `<b>${esc(m.title.replace(/^\p{Extended_Pictographic}\s*/u, ''))}</b><div class="sec">${esc(m.body.length > 200 ? m.body.slice(0, 200) + '…' : m.body)}</div>` })),
+  // ── what Ledger noticed
+  const items = [...T.messages.map(m => ({ at: m.created, ic: 'msg', html: `<b>${esc(m.title.replace(/^\p{Extended_Pictographic}\s*/u, ''))}</b><div class="sec">${esc(m.body.length > 180 ? m.body.slice(0, 180) + '…' : m.body)}</div>` })),
     ...T.activity.map(a => ({ at: a.at, ic: a.kind, html: esc(a.text) }))]
-    .sort((a, b) => b.at.localeCompare(a.at)).slice(0, 7);
+    .sort((a, b) => b.at.localeCompare(a.at)).slice(0, 5);
   $('#t-feed').innerHTML = items.length ? items.map(i => `<li><span class="ic ic-${esc(i.ic)}"></span><span>${i.html}<div class="t">${ago(i.at)}</div></span></li>`).join('') : '<li class="muted">Quiet so far.</li>';
-
-  renderGoals('#t-goals', T.goals, true);
+  tickClock();
 }
-setInterval(() => { if (!document.hidden && page === 'today') tickClock(); }, 30000);
-$('#askchips') && $$('#askchips button').forEach(b => b.onclick = () => { $('#askq').value = b.textContent; $('#askf').requestSubmit(); });
+setInterval(() => { if (!document.hidden && page === 'today') tickClock(); }, 20000);
+$$('#askchips button').forEach(b => b.onclick = () => { $('#askq').value = b.textContent; $('#askf').requestSubmit(); });
 
-function mathHTML(S) {
-  const monthName = new Date().toLocaleString('en-CA', { month: 'long' }), inc = S.income, save = S.savings_set_aside || 0, spent = Math.max(0, S.spent);
-  const pd = S.pay_detail;
+function periodMath(P) {
   const row = (l, v, cls = '') => `<div class="${cls}"><span>${l}</span><span>${v}</span></div>`;
-  return     row(pd ? `Pay: ${pd.received_count} paycheque${pd.received_count === 1 ? '' : 's'} so far + ${pd.coming.length} still to come (${fmt(pd.typical)} each)` : 'Pay (average month)', fmt(S.pay_monthly)) +
-    (S.other_income_monthly ? row('Other income you can count on (benefits, cashback)', fmt(S.other_income_monthly)) : '') +
-    row('Money coming in', fmt(inc), 'total') +
-    (S.fixed_items || []).filter(i => i.amount > 0).map(i => row(`− ${esc(i.merchant === 'Family Support' ? 'Dad' : i.merchant)} <span class="muted">(${esc(i.how || '')})</span>`, fmt(i.amount), 'ind')).join('') +
-    (save ? row(`− Savings`, fmt(save), 'ind') : '') +
-    row('For everyday spending', fmt(S.flexible_budget), 'total') +
-    row('− Spent so far this month (food, gas, shopping…)', fmt(spent), 'ind') +
-    (S.hold_back ? row(`− Held back: ${esc(S.hold_reason)}`, fmt(S.hold_back), 'ind') : '') +
-    row(`Left for the rest of ${monthName}`, fmt(S.safe_to_spend), 'total') +
-    row(`÷ ${S.days_left} days left`, `${fmt(S.per_day)} a day`, 'ind');
-
+  const share = m => m * P.length / 30.44;
+  return (P.mode === 'pay' ? row(`Paycheque${P.start ? ', ' + dshort(P.start) : ''}`, fmt(P.pay)) : row('Pay this month', fmt(P.pay))) +
+    (P.other ? row('Other money in since then (friends paying you back aside)', fmt(P.other)) : '') +
+    row('Came in', fmt(P.money_in), 'total') +
+    Object.entries(P.bill_cats).sort((a, b) => b[1] - a[1]).map(([c, m]) => row(`− ${esc(billName(c))} <span class="muted">${fmt(m)}/mo × ${P.length} of 30.4 days</span>`, fmt(share(m)), 'ind')).join('') +
+    row(`Free this ${P.mode === 'pay' ? 'pay' : 'month'}`, fmt(P.free), 'total') +
+    row('− Everyday spending since then (food, gas, shopping…)', fmt(P.spent), 'ind') +
+    row(`Left until ${P.next_is_pay ? 'payday' : dshort(P.next)}`, fmt(P.left), 'total') +
+    row(`÷ ${P.days_left} day${P.days_left === 1 ? '' : 's'}`, `${fmt(P.per_day)} a day`, 'ind') +
+    (P.lumps ? row(`<span class="muted">Not counted as pay: ${fmt(P.lumps)} one-off (OSAP, tax return…)</span>`, '') : '');
 }
+
+function renderBills(listSel, barSel, sumSel, leverSel, B, P, L) {
+  const on = B.filter(b => b.status !== 'off');
+  const total = on.reduce((a, b) => a + b.amount, 0), gone = on.reduce((a, b) => a + Math.min(b.paid, b.amount), 0);
+  $(sumSel).innerHTML = `<b>${fmt(gone)}</b> of ${fmt(total)} gone out`;
+  $(barSel).innerHTML = `<i style="width:${total ? (gone / total * 100).toFixed(1) : 0}%"></i>`;
+  const perPay = m => P && P.mode === 'pay' && P.every_days ? `<small>${fmt(m * P.every_days / 30.44)} a pay</small>` : '';
+  $(listSel).innerHTML = B.map(b => {
+    const soon = b.status === 'due' && b.due && P && b.due < P.next;
+    const cls = b.status === 'paid' ? 'paid' : b.status === 'part' ? 'part' : b.status === 'late' ? 'late' : b.status === 'off' ? 'off' : soon ? 'soon' : '';
+    const wh = { paid: `Paid ${b.paid_on ? dshort(b.paid_on) : ''}`, part: `${fmt(b.paid)} so far${b.due ? ' · usually by ' + dshort(b.due) : ''}`,
+      late: `Usually out by ${b.due ? dshort(b.due) : ''}, not seen yet`, off: `Off: ${esc(b.off || '')}`,
+      untracked: 'Counted every month, no emails for this one',
+      due: soon ? `Due ${dshort(b.due)} · before payday` : `Usually ${b.due ? dshort(b.due) : 'monthly'}` }[b.status];
+    return `<li class="${cls}"><span class="st"></span><span><div class="nm">${esc(b.name)}</div><div class="wh">${wh}</div></span>
+      <span class="am">${fmt(b.amount)}${b.status === 'paid' ? '' : perPay(b.amount)}</span></li>`; }).join('') || '<li class="muted">No bills found yet.</li>';
+  if (!leverSel) return;
+  let t = '';
+  if (L) {
+    t = L.gap_per_pay > 0
+      ? `<b>Dad is ${fmt(L.dad)} a month.</b> A typical pay leaves ${fmt(L.free_typical)} after bills, but you usually spend ${fmt(L.usual_per_pay)} between paydays. You'd break even with Dad at about <b>${fmt(L.break_even)}</b>. Every $100 less is ${fmt(L.per_100)} more each pay.`
+      : `<b>Dad is ${fmt(L.dad)} a month.</b> A typical pay leaves ${fmt(L.free_typical)} after bills, about ${fmt(-L.gap_per_pay)} more than you usually spend. Every $100 less to Dad adds ${fmt(L.per_100)} a pay.`;
+  }
+  $(leverSel).innerHTML = t;
+}
+
+function renderHistory(H) {
+  const el = $('#t-hist');
+  if (!H.length) { el.innerHTML = '<div class="empty">Appears after a couple of paydays.</div>'; $('#hist-sum').textContent = ''; $('#t-hist-note').textContent = ''; return; }
+  const top = Math.max(1, ...H.map(h => Math.max(h.free, h.spent))) * 1.08;
+  el.style.setProperty('--n', H.length);
+  el.innerHTML = H.map(h => `<div class="hp" title="Pay ${dshort(h.start)}: ${fmt(h.pay + h.other)} in, ${fmt(h.bills)} bills share, ${fmt(h.spent)} everyday → ${h.kept >= 0 ? fmt(h.kept) + ' to spare' : fmt(-h.kept) + ' short'}">
+    <div class="tr"><div class="cap" data-v="${fmt(h.free)}" style="bottom:${(Math.max(0, h.free) / top * 100).toFixed(1)}%"></div>
+    <div class="b ${h.spent > h.free ? 'over' : ''}" style="height:${(h.spent / top * 100).toFixed(1)}%"></div></div><span class="d">${md(h.start)}</span></div>`).join('') +
+    '';
+  const ok = H.filter(h => h.spent <= h.free).length, avg = k => H.reduce((a, h) => a + h[k], 0) / H.length;
+  $('#hist-sum').innerHTML = `Covered <b>${ok} of ${H.length}</b>`;
+  $('#t-hist-note').innerHTML = `<span class="hist-legend"><span><i style="background:var(--free)"></i>Everyday spending</span><span><i style="background:var(--spent)"></i>More than the pay left</span><span><i class="cap"></i>What the pay left after bills</span></span>` +
+    `<span style="display:block;margin-top:8px">On average a pay left <b>${fmt(avg('free'))}</b> after bills and you spent <b>${fmt(avg('spent'))}</b> before the next one.</span>`;
+}
+
+function mathHTML(S) { return S && S.mode ? periodMath(S) : ''; }
 
 function renderGoals(sel, G, compact) {
+  if (!$(sel)) return;
   if (!G.goals.length) { $(sel).innerHTML = '<div class="empty">No goals yet.</div>'; return; }
-  $(sel).innerHTML = (G.needs_balances ? `<div class="sub">Set your balances (System) so Ledger can fund these from real cash.</div>` : '') + G.goals.map(g => `
-    <div class="goal"><div class="top"><span>${g.done ? '✅ ' : ''}${esc(g.name)}</span>
-      <span class="sec">${g.funded == null ? '' : fmt(g.funded) + ' / '}<span ${compact ? '' : `class="link" data-goal="${g.id}"`}>${fmt(g.target)}</span></span></div>
-      <div class="track"><div class="f ${g.done ? 'good' : ''}" style="width:${g.pct == null ? 0 : Math.min(100, g.pct * 100)}%"></div></div>
-      <div class="meta">${[g.due ? 'by ' + dshort(g.due) : '', g.per_month ? `save ${fmt(g.per_month)}/mo to make it` : '', g.why || ''].filter(Boolean).join(' · ')}</div></div>`).join('');
-  $$(sel + ' [data-goal]').forEach(el => el.onclick = async () => {
-    const v = prompt('New target ($):', ''); if (!v) return;
-    await api('/api/goal', { method: 'POST', body: { id: +el.dataset.goal, target: parseFloat(v) } }); toast('Goal updated'); load();
-  });
+  $(sel).innerHTML = G.goals.map(g => `
+    <div class="goal"><div class="top"><span>${g.done ? '✅ ' : ''}${esc(g.name)}</span><span class="sec">${fmt(g.target)}</span></div>
+      <div class="meta">${[g.due ? 'by ' + dshort(g.due) : '', g.per_month ? `save ${fmt(g.per_month)}/mo to make it` : ''].filter(Boolean).join(' · ')}</div></div>`).join('');
 }
 
 // ───────── SPENDING ─────────
@@ -326,9 +368,7 @@ async function loadPlan() {
     ['Everyday spending', fmt(F.assumptions.everyday_per_day * 30.4) + '/mo', 'what the forecast assumes']]
     .map(([a, b, c]) => `<div class="callout">${a}<b>${b}</b>${c}</div>`).join('');
   // math
-  const S = D.safe;
-  $('#f-math').innerHTML = `<div class="math">${mathHTML(S)}</div>`;
-  renderGoals('#f-goals', D.goals, false);
+  $('#f-math').innerHTML = `<div class="math">${periodMath(D.period)}</div>`;
   $('#f-events').innerHTML = [...D.events].sort((a, b) => (a.date || a.start).localeCompare(b.date || b.start)).map(e => { const d = e.date || e.start; const amt = e.amount || e.budget || e.monthly;
     return `<li><span class="when">${dshort(d)}</span><span><i class="dotk event"></i>${esc(e.name)} <span class="tag">${esc({ pause: 'paused', stop: 'ends', one_time: 'one-off', trip: 'trip', income: 'new income' }[e.kind] || e.kind)}</span>${e.end ? ` <span class="muted">→ ${dshort(e.end)}</span>` : ''}</span>
     <span class="amt">${amt ? fmt(amt) : (e.kind === 'one_time' || e.kind === 'income' ? '<span class="muted">set amount</span>' : '')}</span></li>`; }).join('');
@@ -345,9 +385,7 @@ async function loadPlan() {
     fixed ${Object.entries(A.fixed).map(([k, v]) => `${esc(k)} ${fmt(v)}`).join(', ') || 'none yet'} · everyday ${fmt(A.everyday_per_day)}/day · other income ${fmt(A.other_income_monthly)}/mo.
     ${A.missing_balances.length ? `<br>Missing balances: ${A.missing_balances.map(esc).join(', ')}.` : ''} Edit life events in config.toml.`;
 }
-$('#goalf').onsubmit = async e => { e.preventDefault(); if (!$('#g-name').value) return;
-  await api('/api/goal', { method: 'POST', body: { name: $('#g-name').value, target: parseFloat($('#g-target').value) || 0, due: $('#g-due').value || null } });
-  $('#g-name').value = $('#g-target').value = ''; toast('Goal added'); loadPlan(); };
+
 
 // ───────── ACTIVITY ─────────
 function catSelect(cur, cls = 'catsel') {
@@ -405,7 +443,8 @@ let qt; $('#f-q').oninput = () => { clearTimeout(qt); qt = setTimeout(loadTx, 25
 
 // ───────── SUBSCRIPTIONS ─────────
 async function loadSubs() {
-  const O = await api('/api/overview?month=' + month());
+  const [O, Bp] = await Promise.all([api('/api/overview?month=' + month()), api('/api/bills')]);
+  renderBills('#b-bills', '#b-bar', '#b-sum', '#b-lever', Bp.bills, Bp.period, Bp.lever);
   const act = O.recurring.filter(r => r.active), yr = act.reduce((a, r) => a + r.yearly_cost, 0);
   const subsOnly = act.filter(r => ['Software & AI', 'Streaming & Music', 'Gym', 'Internet & Phone'].includes(r.category));
   $('#sub-kpis').innerHTML = [['Recurring per month', fmt(yr / 12), `${act.length} active`], ['Per year', fmt(yr), 'everything recurring'],
@@ -465,8 +504,8 @@ function badges(review, health) {
 }
 $('#askf').onsubmit = async e => { e.preventDefault(); const q = $('#askq').value.trim(); if (!q) return;
   $('#askout').textContent = 'Thinking…'; const r = await api('/api/ask', { method: 'POST', body: { q } }); $('#askout').textContent = r.answer || r.error; };
-$('#syncbtn').onclick = async () => { const b = $('#syncbtn'); b.disabled = true; b.textContent = 'Syncing…';
-  try { const r = await api('/api/sync', { method: 'POST' }); toast((r.log || []).filter(l => l.trim()).slice(-1)[0]?.trim() || 'Synced'); } finally { b.disabled = false; b.textContent = 'Sync now'; load(); } };
+$('#syncbtn').onclick = async () => { const b = $('#syncbtn'); b.disabled = true; $('#lastsync').textContent = 'Checking…';
+  try { const r = await api('/api/sync', { method: 'POST' }); toast((r.log || []).filter(l => l.trim()).slice(-1)[0]?.trim() || 'Synced'); } finally { b.disabled = false; load(); } };
 
 // live: refresh the open page when new data lands (sync, Apple Pay tap, edits on another device)
 setInterval(async () => { if (document.hidden) return; try { const v = (await api('/api/version')).version;

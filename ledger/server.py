@@ -168,6 +168,8 @@ def make_handler(con, cfg):
                 return self._json(pages.spending_page(con, cfg, month))
             if path == "/api/planpage":
                 return self._json(pages.plan_page(con, cfg, q))
+            if path == "/api/bills":
+                return self._json(pages.bills_page(con, cfg))
             if path == "/api/system":
                 return self._json(pages.system_page(con, cfg))
             if path == "/api/overview":

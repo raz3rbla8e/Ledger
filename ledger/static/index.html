@@ -6,106 +6,115 @@
 <title>Ledger</title>
 <link rel="manifest" href="/static/manifest.json">
 <link rel="icon" href="/static/icon.svg">
-<meta name="theme-color" content="#0e1524" media="(prefers-color-scheme: dark)">
-<meta name="theme-color" content="#eef2f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#131210" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F4F0E8" media="(prefers-color-scheme: light)">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="apple-touch-icon" href="/static/icon.svg">
 <link rel="preload" href="/static/fonts/bricolage.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/static/fonts/hanken.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <div class="viz-root" id="root">
-  <aside class="side">
-    <div class="brand"><img src="/static/icon.svg" alt=""><span>Ledger</span></div>
+  <header class="top">
+    <a class="mark" data-go="today" aria-label="Ledger home"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 5a11 11 0 1 0 10.4 7.3" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/><circle cx="26" cy="8" r="2.8" class="mark-dot"/></svg><span>ledger</span></a>
     <nav id="nav">
-      <a data-p="today" class="on"><i>◉</i><span>Today</span></a>
-      <a data-p="spending"><i>▤</i><span>Spending</span></a>
-      <a data-p="plan"><i>↗</i><span>Plan</span></a>
-      <a data-p="activity"><i>≡</i><span>Activity</span><b class="badge hidden" id="rbadge"></b></a>
-      <a data-p="subs"><i>↻</i><span>Subscriptions</span></a>
-      <a data-p="system"><i>⚙</i><span>System</span><b class="badge warn hidden" id="hbadge">!</b></a>
+      <a data-p="today" class="on">Now</a>
+      <a data-p="spending">Spending</a>
+      <a data-p="subs">Bills</a>
+      <a data-p="plan">Plan</a>
+      <a data-p="activity">Activity<b class="badge hidden" id="rbadge"></b></a>
+      <a data-p="system">Settings<b class="badge warn hidden" id="hbadge">!</b></a>
     </nav>
-    <div class="side-foot">
+    <div class="top-r">
       <select id="month" aria-label="Month"></select>
-      <div class="sync"><span class="pulse" id="pulse"></span><span id="lastsync">—</span></div>
-      <button class="btn" id="syncbtn">Sync now</button>
+      <a class="gear" data-go="system" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg></a>
+      <button class="syncbtn" id="syncbtn" title="Check the inbox now"><span class="pulse" id="pulse"></span><span id="lastsync">…</span></button>
     </div>
-  </aside>
+  </header>
 
   <main id="main">
-    <!-- TODAY -->
+    <!-- NOW -->
     <section id="p-today" class="page">
-      <header class="topline">
-        <p class="headline" id="headline"><span id="hl-text">Loading…</span></p>
+      <div class="now-top">
         <span class="clock" id="clock"></span>
-      </header>
+        <p class="headline" id="headline"><span id="hl-text">Loading…</span></p>
+      </div>
 
       <div class="hero" id="hero">
-        <div class="dial-wrap" aria-hidden="true">
-          <svg class="dial" viewBox="0 0 260 260">
-            <defs>
-              <linearGradient id="g-ice" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:var(--ice-hi)"/><stop offset="1" style="stop-color:var(--ice)"/></linearGradient>
-            </defs>
-            <circle class="dial-track" cx="130" cy="130" r="104"/>
-            <circle class="dial-money" id="dial-money" cx="130" cy="130" r="104" pathLength="1000" stroke="url(#g-ice)" transform="rotate(-90 130 130)"/>
-            <circle class="dial-time-track" cx="130" cy="130" r="123"/>
-            <circle class="dial-time" id="dial-time" cx="130" cy="130" r="123" pathLength="1000" transform="rotate(-90 130 130)"/>
-            <g id="dial-ticks"></g>
-            <circle class="dial-hand" id="dial-hand" cx="130" cy="7" r="4.5"/>
-          </svg>
-          <div class="dial-center">
-            <div class="dial-num" id="t-today">—</div>
-            <div class="dial-cap" id="dial-cap">left today</div>
+        <div class="aura" aria-hidden="true"></div>
+        <div class="hero-row">
+          <div class="hero-main">
+            <div class="eyebrow" id="h-eyebrow">Free until payday</div>
+            <div class="big" id="h-left">—</div>
+            <div class="hero-sub" id="h-sub"></div>
+          </div>
+          <div class="payday" id="h-payday">
+            <span class="pd-k" id="pd-k">Next payday</span>
+            <span class="pd-d" id="pd-date">—</span>
+            <span class="pd-c"><i class="tick"></i><span id="pd-count">—</span></span>
           </div>
         </div>
-        <div class="hero-body">
-          <p class="hero-line" id="hero-line"></p>
-          <div class="flow">
-            <div class="flow-head"><span id="flow-title">November</span><span id="flow-left"></span></div>
-            <div class="flow-bar" id="flow-bar"></div>
-            <div class="flow-legend" id="flow-legend"></div>
-            <p class="flow-note" id="flow-note"></p>
-            <details class="how"><summary>How this is worked out</summary><div class="math" id="t-math"></div></details>
-          </div>
+
+        <div class="split-wrap">
+          <div class="split-head"><span id="split-title">This pay</span><span id="split-right"></span></div>
+          <div class="split" id="h-split"></div>
+          <div class="split-legend" id="h-legend"></div>
         </div>
+
+        <div class="days-wrap">
+          <div class="days" id="h-days"></div>
+          <div class="days-foot"><span id="days-l"></span><span id="days-r"></span></div>
+        </div>
+        <details class="how"><summary>How this is worked out</summary><div class="math" id="t-math"></div></details>
       </div>
 
-      <a class="outlook" id="outlook" data-go="plan"></a>
+      <a class="ahead" id="ahead" data-go="plan"></a>
 
-      <div class="grid g-live">
-        <div class="card stream-card">
-          <div class="row-between"><h3><span class="live-dot" id="pulse2"></span>As it happens</h3><a class="link" data-go="activity">Everything</a></div>
-          <ul class="stream" id="t-stream"></ul>
+      <div class="cols">
+        <div class="col">
+          <section class="panel">
+            <div class="panel-h"><h2>Bills this month</h2><span class="panel-r" id="bills-sum"></span></div>
+            <div class="billbar" id="billbar"></div>
+            <ul class="bills" id="t-bills"></ul>
+            <p class="lever" id="t-lever"></p>
+          </section>
+          <section class="panel">
+            <div class="panel-h"><h2>Your last paycheques</h2><span class="panel-r" id="hist-sum"></span></div>
+            <div class="hist" id="t-hist"></div>
+            <p class="pnote" id="t-hist-note"></p>
+          </section>
         </div>
-        <div class="card">
-          <h3>Next four weeks</h3>
-          <div class="strip" id="t-strip"></div>
-          <ul class="timeline" id="t-upcoming"></ul>
-        </div>
-      </div>
-
-      <div class="grid g-3b">
-        <div class="card"><h3>What Ledger noticed</h3><ul class="feed" id="t-feed"></ul></div>
-        <div class="card"><h3>Goals</h3><div id="t-goals"></div></div>
-        <div class="card ask-card">
-          <h3>Ask</h3>
-          <form id="askf" class="ask"><input id="askq" placeholder="Can I afford $300 this weekend?" autocomplete="off"><button class="btn primary">Ask</button></form>
-          <div class="chips" id="askchips"><button type="button">How much on food this month?</button><button type="button">What's due this week?</button><button type="button">/plan</button></div>
-          <div class="answer" id="askout"></div>
+        <div class="col">
+          <section class="panel">
+            <div class="panel-h"><h2><span class="live-dot" id="pulse2"></span>Latest</h2><a class="link" data-go="activity">All activity</a></div>
+            <ul class="stream" id="t-stream"></ul>
+          </section>
+          <section class="panel ask-panel">
+            <div class="panel-h"><h2>Ask</h2></div>
+            <form id="askf" class="ask"><input id="askq" placeholder="Can I afford $60 tonight?" autocomplete="off"><button class="btn primary">Ask</button></form>
+            <div class="chips" id="askchips"><button type="button">What's due before payday?</button><button type="button">How much on food this month?</button><button type="button">Gambling net this year</button></div>
+            <div class="answer" id="askout"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-h"><h2>Noticed</h2></div>
+            <ul class="feed" id="t-feed"></ul>
+          </section>
         </div>
       </div>
     </section>
 
     <!-- SPENDING -->
     <section id="p-spending" class="page hidden">
+      <div class="page-h"><h1>Spending</h1><p class="sub">Where the money went this month. Bills are on the Bills page; this is mostly everyday stuff.</p></div>
       <div class="grid g-4" id="s-kpis"></div>
       <div class="grid g-2">
-        <div class="card"><h3>Budgets</h3><div class="sub">Your usual month per category, learned from the last 3 months. Orange means running ahead of the month.</div><div id="s-budgets"></div></div>
+        <div class="card"><h3>Budgets</h3><div class="sub">Your usual month per category, learned from the last 3 months. Ochre means running ahead of the month, persimmon means over.</div><div id="s-budgets"></div></div>
         <div class="card"><h3>Where it went</h3><div class="sub">This month. The thin mark is your usual month. Tap a row to see the purchases.</div><div id="s-cats"></div></div>
       </div>
       <div class="card"><h3>Money in vs money out</h3><div class="sub">Last 12 months. Moving money between your own accounts isn’t counted.</div>
-          <div class="legend"><span><i style="background:var(--s3)"></i>In</span><span><i style="background:var(--s2)"></i>Out</span></div>
+          <div class="legend"><span><i style="background:var(--free)"></i>In</span><span><i style="background:var(--spent)"></i>Out</span></div>
           <div class="chart"><canvas id="c-monthly"></canvas></div></div>
       <div class="grid g-2">
         <div class="card"><h3>Top merchants</h3><div class="sub">This month</div><table id="s-merchants"></table></div>
@@ -125,8 +134,9 @@
 
     <!-- PLAN -->
     <section id="p-plan" class="page hidden">
+      <div class="page-h"><h1>Plan</h1><p class="sub">Where things are heading if you keep living the way you have lately. Paydays, bills and the life events you told Ledger about are all in it.</p></div>
       <div class="card">
-        <div class="row-between"><div><h3>Cash forecast</h3><div class="sub" id="f-sub"></div></div><div class="legend"><span><i style="background:var(--s1)"></i>Projected cash</span><span><i class="dash"></i>Cushion</span></div></div>
+        <div class="row-between"><div><h3>Running total from today</h3><div class="sub" id="f-sub"></div></div><div class="legend"><span><i style="background:var(--s1)"></i>Projected cash</span><span><i class="dash"></i>Cushion</span></div></div>
         <div class="chart xl"><canvas id="c-forecast"></canvas></div>
         <div id="f-callouts" class="callouts"></div>
       </div>
@@ -139,19 +149,16 @@
           <button class="btn primary">Run it</button><button class="btn" type="button" id="w-clear">Clear</button>
         </form><div id="w-result" class="sub" style="margin-top:8px"></div></div>
       <div class="grid g-2">
-        <div class="card"><h3>This month, step by step</h3><div class="sub">How today’s number is worked out</div><div id="f-math"></div></div>
-        <div class="card"><h3>Goals</h3><div class="sub">Tap a target to change it</div><div id="f-goals"></div>
-          <form id="goalf" class="row" style="margin-top:10px"><input id="g-name" placeholder="New goal (e.g. NYC move fund)"><input id="g-target" placeholder="$" style="width:90px"><input id="g-due" type="date" style="width:150px"><button class="btn">Add</button></form></div>
-      </div>
-      <div class="grid g-2">
+        <div class="card"><h3>This pay, step by step</h3><div class="sub">How the number on Now is worked out</div><div id="f-math"></div></div>
         <div class="card"><h3>Life plan</h3><div class="sub">Changes coming up that the forecast already accounts for</div><ul class="timeline" id="f-events"></ul></div>
-        <div class="card"><h3>Savings rate</h3><div class="sub" id="f-sav-sub"></div><div class="chart"><canvas id="c-rate"></canvas></div></div>
       </div>
+      <div class="card"><h3>Kept each month</h3><div class="sub" id="f-sav-sub"></div><div class="chart"><canvas id="c-rate"></canvas></div></div>
       <div class="card"><h3>Month by month</h3><div class="sub">Projected, assuming you keep spending the way you have lately</div><table id="f-months"></table><div class="sub" id="f-assume" style="margin-top:10px"></div></div>
     </section>
 
     <!-- ACTIVITY -->
     <section id="p-activity" class="page hidden">
+      <div class="page-h"><h1>Activity</h1><p class="sub">Every transaction Ledger has read. Change a category once and it remembers.</p></div>
       <div class="card" id="reviewcard">
         <div class="row-between"><div><h3>Needs a look</h3><div class="sub">Grouped by merchant / person — decide once and every past and future one follows</div></div><button class="btn" id="okall">All good</button></div>
         <table id="reviewtable"></table>
@@ -171,16 +178,20 @@
 
     <!-- SUBSCRIPTIONS -->
     <section id="p-subs" class="page hidden">
+      <div class="page-h"><h1>Bills</h1><p class="sub">What has to go out every month, whether it has, and what each paycheque carries toward it.</p></div>
+      <section class="panel"><div class="panel-h"><h2>This month</h2><span class="panel-r" id="b-sum"></span></div>
+        <div class="billbar" id="b-bar"></div><ul class="bills" id="b-bills"></ul><p class="lever" id="b-lever"></p></section>
       <div class="grid g-3" id="sub-kpis"></div>
-      <div class="card"><h3>Subscriptions &amp; bills</h3><div class="sub">Detected automatically from repeating charges</div><table id="rectable"></table></div>
+      <div class="card"><h3>Repeating charges</h3><div class="sub">Found automatically: same place, regular gap, similar amount</div><table id="rectable"></table></div>
     </section>
 
     <!-- SYSTEM -->
     <section id="p-system" class="page hidden">
+      <div class="page-h"><h1>Settings</h1><p class="sub">What Ledger listens to, and whether it's healthy.</p></div>
       <div class="card"><h3>Data quality</h3><div class="sub">Is anything missing or stale? Ledger checks this every sync.</div><div id="y-quality" class="callouts"></div></div>
       <div class="card"><h3>Data sources</h3><div class="sub">Everything Ledger listens to, and whether it's healthy</div><div id="y-sources" class="sources"></div></div>
       <div class="grid g-2">
-        <div class="card"><h3>Accounts &amp; balances</h3><div class="sub">Type a balance once — Ledger keeps it current from then on (statements in Downloads re-sync it automatically)</div><table id="y-accts"></table></div>
+        <details class="card more"><summary><h3>Accounts &amp; balances</h3><span class="sub">Optional. Ledger works from your paycheques, so balances only matter for the long-range plan.</span></summary><table id="y-accts"></table></details>
         <div class="card"><h3>Unread bank emails</h3><div class="sub">Bank emails no reader understood. With Ollama running, Ledger reads these itself.</div><table id="y-unparsed"></table></div>
       </div>
       <div class="grid g-2">
@@ -192,8 +203,11 @@
   </main>
 
   <nav class="tabbar" id="tabbar">
-    <a data-p="today" class="on"><i>◉</i>Today</a><a data-p="spending"><i>▤</i>Spending</a><a data-p="plan"><i>↗</i>Plan</a>
-    <a data-p="activity"><i>≡</i>Activity</a><a data-p="system"><i>⚙</i>More</a>
+    <a data-p="today" class="on"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>Now</a>
+    <a data-p="spending"><svg viewBox="0 0 24 24"><path d="M5 19V11M12 19V5M19 19v-6"/></svg>Spending</a>
+    <a data-p="subs"><svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="16" rx="2"/><path d="M9 9h6M9 13h6M9 17h3"/></svg>Bills</a>
+    <a data-p="plan"><svg viewBox="0 0 24 24"><path d="M4 17l5-5 4 3 7-8"/><path d="M15 7h5v5"/></svg>Plan</a>
+    <a data-p="activity"><svg viewBox="0 0 24 24"><path d="M5 7h14M5 12h14M5 17h9"/></svg>Activity</a>
   </nav>
   <div id="toast"></div>
 </div>

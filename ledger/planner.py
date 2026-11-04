@@ -233,3 +233,189 @@ def spend_between(con, start, end, category=None, merchant=None, flexible_only=F
         args += [f"%{merchant}%", f"%{merchant}%"]
     r = con.execute(sql, args).fetchone()
     return round(r["s"] or 0, 2), r["n"]
+
+
+# ───────── paycheque to paycheque ─────────
+# You live pay to pay, so the dashboard is built around the pay period (last payday → next payday), not the
+# month and not account balances. Each paycheque carries its share of the monthly bills; the rest is yours until
+# the next one lands.
+
+BILLS = FIXED | {"Parking & Tolls", "Line of Credit"}
+DAYS_PER_MONTH = 30.44
+
+
+def _events(cfg):
+    return cfg["plan"].get("events", [])
+
+
+def _ev_cats(e):
+    c = e.get("category")
+    return set(c) if isinstance(c, list) else {c} if c else set()
+
+
+def _bill_off(cfg, cat, d):
+    """The plan event that switches this bill off on day d (Dad paused in December, rent stops when you move)."""
+    for e in _events(cfg):
+        if cat not in _ev_cats(e):
+            continue
+        if e.get("kind") == "stop" and d >= e["date"]:
+            return e["name"]
+        if e.get("kind") == "pause" and e["start"] <= d <= e["end"]:
+            return e["name"]
+    return None
+
+
+def _pay_stop(cfg):
+    return min([date.fromisoformat(e["date"]) for e in _events(cfg) if e.get("kind") == "stop" and "Salary" in _ev_cats(e)]
+               or [date.max])
+
+
+def bill_list(con, cfg, today=None):
+    """Every monthly bill with its amount (what you told Ledger, or the usual month), the day it normally goes out,
+    and whether this month's has gone out yet."""
+    today = today or date.today()
+    m0 = today.replace(day=1)
+    fx = fixed_costs(con, cfg, today, BILLS)
+    since = (m0 - timedelta(days=100)).isoformat()
+    out = []
+    for cat, v in fx.items():
+        amt = v["amount"]
+        if amt <= 1:
+            continue
+        # the day of month the biggest payment in this category usually goes out
+        days = []
+        for r in con.execute(f"""SELECT substr(date,1,7) mo, date, amount FROM transactions WHERE category=? AND kind IN {SPEND_KINDS}
+                                 AND amount<0 AND date>=? AND date<? ORDER BY amount""", (cat, since, m0.isoformat())):
+            if r["mo"] not in {d[0] for d in days}:
+                days.append((r["mo"], int(r["date"][8:10])))
+        day = int(statistics.median([d for _, d in days])) if days else None
+        paid = -(con.execute(f"SELECT COALESCE(sum(amount),0) FROM transactions WHERE category=? AND kind IN {SPEND_KINDS} AND date>=? AND date<=?",
+                             (cat, m0.isoformat(), today.isoformat())).fetchone()[0])
+        last = con.execute(f"SELECT max(date) FROM transactions WHERE category=? AND kind IN {SPEND_KINDS} AND amount<0 AND date>=?",
+                           (cat, m0.isoformat())).fetchone()[0]
+        off = _bill_off(cfg, cat, today.isoformat())
+        import calendar
+        nd = calendar.monthrange(today.year, today.month)[1]
+        due = m0.replace(day=min(day, nd)).isoformat() if day else None
+        status = ("off" if off else "paid" if paid >= amt * 0.9 else "part" if paid > amt * 0.15 else
+                  "untracked" if day is None else "late" if due < today.isoformat() else "due")
+        out.append(dict(category=cat, name="Dad" if cat == "Family Support" else cat, amount=amt, how=v["how"], day=day, due=due,
+                        paid=round(max(0.0, paid), 2), paid_on=last, status=status, off=off))
+    order = {"late": 0, "due": 1, "part": 2, "untracked": 3, "paid": 4, "off": 5}
+    return sorted(out, key=lambda b: (order[b["status"]], b["due"] or "9999", -b["amount"]))
+
+
+def _everyday(con, start, end):
+    """Everyday spending (not bills) from start to end, both inclusive, net of what friends paid back."""
+    bx = ",".join("?" * len(BILLS))
+    return -(con.execute(f"SELECT COALESCE(sum(amount),0) FROM transactions WHERE kind IN {SPEND_KINDS} AND date>=? AND date<=? AND category NOT IN ({bx})",
+                         (start, end, *BILLS)).fetchone()[0])
+
+
+def _income(con, start, end):
+    r = con.execute("""SELECT COALESCE(sum(CASE WHEN category='Salary' THEN amount END),0) pay,
+                              COALESCE(sum(CASE WHEN category!='Salary' AND amount<1000 THEN amount END),0) other,
+                              COALESCE(sum(CASE WHEN category!='Salary' AND amount>=1000 THEN amount END),0) lumps
+                       FROM transactions WHERE kind='income' AND amount>0 AND date>=? AND date<=?""", (start, end)).fetchone()
+    return round(r["pay"], 2), round(r["other"], 2), round(r["lumps"], 2)
+
+
+def bills_per_day(con, cfg, d):
+    """Monthly bills still switched on at day d, spread per day."""
+    fx = fixed_costs(con, cfg, d if isinstance(d, date) else date.fromisoformat(d), BILLS)
+    iso = d.isoformat() if isinstance(d, date) else d
+    on = {c: v["amount"] for c, v in fx.items() if v["amount"] > 1 and not _bill_off(cfg, c, iso)}
+    return sum(on.values()) / DAYS_PER_MONTH, on
+
+
+def pay_period(con, cfg, today=None):
+    """This pay: what came in on payday, the share of monthly bills it has to carry, what you've spent since,
+    and what's free until the next one. When no more paycheques are coming (co-op over) it falls back to the
+    calendar month, with whatever else comes in."""
+    import calendar
+    today = today or date.today()
+    pc = pay_cycle(con, today)
+    stop = _pay_stop(cfg)
+    try:
+        from .forecast import _flex_daily
+        usual_day = _flex_daily(con, today)
+    except Exception:
+        usual_day = 0.0
+    per_day_bills, on = bills_per_day(con, cfg, today)
+    if pc and date.fromisoformat(pc["next"]) <= stop + timedelta(days=pc["every_days"]):
+        start, nxt = date.fromisoformat(pc["last"]), date.fromisoformat(pc["next"])
+        mode = "pay"
+        next_is_pay = nxt <= stop
+    else:
+        start = today.replace(day=1)
+        nxt = start + timedelta(days=calendar.monthrange(today.year, today.month)[1])
+        mode, next_is_pay = "month", False
+    end = nxt - timedelta(days=1)
+    length = (nxt - start).days
+    pay, other, lumps = _income(con, start.isoformat(), today.isoformat())
+    bills = round(per_day_bills * length, 2)
+    spent = round(_everyday(con, start.isoformat(), today.isoformat()), 2)
+    money_in = round(pay + other, 2)
+    free = round(money_in - bills, 2)
+    left = round(free - spent, 2)
+    days_left = max(1, (nxt - today).days)
+    # day by day, for the strip
+    daily = {r["date"]: -r["s"] for r in con.execute(
+        f"""SELECT date, sum(amount) s FROM transactions WHERE kind IN {SPEND_KINDS} AND date>=? AND date<=?
+            AND category NOT IN ({",".join("?" * len(BILLS))}) GROUP BY date""", (start.isoformat(), end.isoformat(), *BILLS))}
+    days = []
+    for i in range(length):
+        d = (start + timedelta(days=i)).isoformat()
+        days.append(dict(date=d, spent=round(max(0.0, daily.get(d, 0.0)), 2)))
+    # bills that normally go out before the next payday
+    due = [b for b in bill_list(con, cfg, today) if b["status"] in ("due", "late", "part") and b["due"] and b["due"] < nxt.isoformat()]
+    # next month's bills that fall before the next payday too
+    if nxt.month != today.month or nxt.year != today.year:
+        for b in bill_list(con, cfg, today):
+            if b["day"] and b["status"] != "off":
+                d2 = nxt.replace(day=1)
+                dd = d2.replace(day=min(b["day"], calendar.monthrange(d2.year, d2.month)[1])).isoformat()
+                if dd < nxt.isoformat() and not _bill_off(cfg, b["category"], dd):
+                    due.append(dict(b, due=dd, status="due", paid=0))
+    return dict(mode=mode, start=start.isoformat(), end=end.isoformat(), next=nxt.isoformat(), next_is_pay=next_is_pay,
+                length=length, day=(today - start).days + 1, days_left=days_left,
+                pay=pay, other=other, lumps=lumps, money_in=money_in, typical_pay=pc["typical"] if pc else None, every_days=pc["every_days"] if pc else None,
+                bills=bills, bills_monthly=round(sum(on.values()), 2), bill_cats=on, spent=spent, free=free, left=left,
+                per_day=round(left / days_left, 2), usual=round(usual_day * length, 2), usual_day=round(usual_day, 2),
+                days=days, due=sorted(due, key=lambda b: b["due"]), pay_stops=None if stop == date.max else stop.isoformat())
+
+
+def pay_history(con, cfg, today=None, n=10):
+    """Each past paycheque: what it brought in, its share of bills, and the everyday spending until the next one.
+    Did the pay cover its stretch?"""
+    today = today or date.today()
+    rows = [date.fromisoformat(r[0]) for r in con.execute(
+        "SELECT DISTINCT date FROM transactions WHERE category='Salary' AND amount>0 AND date<? ORDER BY date DESC LIMIT ?",
+        (today.isoformat(), n + 1))][::-1]
+    out = []
+    for a, b in zip(rows, rows[1:]):
+        if (b - a).days > 40:
+            continue
+        end = (b - timedelta(days=1)).isoformat()
+        pay, other, lumps = _income(con, a.isoformat(), end)
+        per_day, _ = bills_per_day(con, cfg, a)
+        bills = round(per_day * (b - a).days, 2)
+        spent = round(_everyday(con, a.isoformat(), end), 2)
+        out.append(dict(start=a.isoformat(), end=end, pay=pay, other=other, bills=bills, free=round(pay + other - bills, 2),
+                        spent=spent, kept=round(pay + other - bills - spent, 2)))
+    return out
+
+
+def dad_lever(con, cfg, pp):
+    """How much Dad's transfer would need to be for your pay to cover bills + your usual everyday spending."""
+    dad = pp["bill_cats"].get("Family Support")
+    if not dad or pp["mode"] != "pay" or not pp["typical_pay"]:
+        return None
+    per_pay = lambda monthly: monthly * pp["every_days"] / DAYS_PER_MONTH
+    other_per_pay = other_income_monthly(con) * pp["every_days"] / DAYS_PER_MONTH
+    free_typical = pp["typical_pay"] + other_per_pay - per_pay(pp["bills_monthly"])
+    usual = pp["usual_day"] * pp["every_days"]
+    gap_pay = usual - free_typical
+    gap_month = gap_pay * DAYS_PER_MONTH / pp["every_days"]
+    return dict(dad=dad, per_100=round(per_pay(100), 2), free_typical=round(free_typical, 2), usual_per_pay=round(usual, 2),
+                gap_per_pay=round(gap_pay, 2), break_even=round(max(0.0, dad - max(0.0, gap_month)), -1) if gap_month > 0 else dad)

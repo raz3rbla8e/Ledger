@@ -45,12 +45,12 @@ def detect(con, cfg, today=None):
                 continue
             amt = -t["amount"]
             if t["category"] == "Salary" and t["amount"] > 0 and not t["counterparty"]:  # a real paycheque, not you moving money
-                s = planner.safe_to_spend(con, cfg, today)
-                bills = ", ".join(f"{b['merchant']} {money0(b['amount'])}" for b in s["upcoming_bills"][:4]) or "nothing big"
+                pp = planner.pay_period(con, cfg, today)
+                due = ", ".join(f"{b['name']} {money0(b['amount'])} ({b['due'][5:]})" for b in pp["due"][:4]) or "nothing big"
                 _queue(con, f"pay:{t['id']}", f"💰 Payday: {money(t['amount'])}",
                        f"{money(t['amount'])} from {t['merchant']} just landed.\n"
-                       f"Still due this month: {bills}.\n→ Safe to spend for the rest of the month: {money0(s['safe_to_spend'])} (~{money0(s['per_day'])}/day), "
-                       f"after keeping {int(cfg['plan']['savings_goal_pct'])}% for savings.", True)
+                       f"{money0(pp['bills'])} of it is this pay's share of the bills. Due before next payday: {due}.\n"
+                       f"→ Free until next payday: {money0(pp['left'])} (~{money0(pp['per_day'])}/day).", True)
             elif t["kind"] == "expense" and amt >= big:
                 _queue(con, f"big:{t['id']}", f"💳 {money(amt)} at {t['merchant']}",
                        f"{money(amt)} at {t['merchant']} ({t['category']}) on {t['date']}. Not you? Check it now.", True)
@@ -164,15 +164,17 @@ def detect(con, cfg, today=None):
     # morning brief
     mb = nc.get("morning_brief", "08:30")
     if mb and datetime.now().strftime("%H:%M") >= mb:
-        s = planner.safe_to_spend(con, cfg, today)
+        pp = planner.pay_period(con, cfg, today)
         y = today - timedelta(days=1)
         ys, yn = planner.spend_between(con, y.isoformat(), y.isoformat(), flexible_only=True)
-        due = [r for r in ins.recurring(con) if r["active"] and r["next_expected"] and r["next_expected"] <= (today + timedelta(days=3)).isoformat()]
-        line = (f"Today you can spend {money0(s['today_allowance'])}." if s["safe_to_spend"] > 0 else
-                f"You're {money0(-s['safe_to_spend'])} past this month's flexible budget — keep today light.")
+        nd = date.fromisoformat(pp["next"])
+        until = f"payday ({nd:%a %b} {nd.day})" if pp["next_is_pay"] else "the end of the month"
+        line = (f"{money0(pp['left'])} free until {until}, ~{money0(pp['per_day'])}/day." if pp["left"] > 0 else
+                f"You're {money0(-pp['left'])} past what this pay leaves. Keep today light.")
+        soon = [b for b in pp["due"] if b["due"] <= (today + timedelta(days=3)).isoformat()]
         _queue(con, f"brief:{today}", f"☀️ {line}",
-               f"{line} Left this month: {money0(s['safe_to_spend'])}.\nYesterday: {money0(ys)} on everyday stuff ({yn} purchases)." +
-               (f"\nComing up: " + ", ".join(f"{r['merchant']} {money0(r['amount'])} ({r['next_expected'][5:]})" for r in due) if due else ""))
+               f"{line}\nYesterday: {money0(ys)} on everyday stuff ({yn} purchase{'s' if yn != 1 else ''})." +
+               (f"\nComing up: " + ", ".join(f"{b['name']} {money0(b['amount'])} ({b['due'][5:]})" for b in soon) if soon else ""))
 
     # reports
     wk = nc.get("weekly_report", "sun 19:00")

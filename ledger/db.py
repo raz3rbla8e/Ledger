@@ -1,4 +1,5 @@
 """SQLite store. One file: ~/Ledger/ledger.db — open it with any SQLite tool if you want raw access."""
+import re
 import sqlite3
 from datetime import datetime
 
@@ -121,6 +122,22 @@ def _migrate(con):
             con.execute("DELETE FROM seen_emails WHERE parsed=0")
             con.execute("DELETE FROM meta WHERE key LIKE 'email_last_sync:%' OR key LIKE 'email_uid:%'")
         con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema', '4')")
+        con.commit()
+        ver = ("4",)
+    if int(ver[0]) < 5:  # tidier merchant names for what's already stored ("Hydro-ottawa-bill-pmnt" → "Hydro Ottawa")
+        from .normalize import merchant_from_description, tidy_merchant
+        for r in con.execute("SELECT id, merchant, description, cat_source, counterparty FROM transactions "
+                             "WHERE cat_source != 'manual' AND merchant IS NOT NULL").fetchall():
+            m = r[1]
+            if r[3] in ("default", "none") and not r[4] and r[2]:
+                new = merchant_from_description(r[2]) or m  # re-read with today's cleaner (store numbers, city tails…)
+            elif "-" in m or re.search(r"(?i)\b(pmnt|pmt|bill payment)$", m):
+                new = tidy_merchant(m)
+            else:
+                continue
+            if new != m:
+                con.execute("UPDATE transactions SET merchant=? WHERE id=?", (new, r[0]))
+        con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('schema', '5')")
         con.commit()
     have = {r[0] for r in con.execute("SELECT name FROM categories")}
     extra = [("Shared Costs", "Housing", "expense"), ("Parking & Tolls", "Transport", "expense"), ("Line of Credit", "Transfers", "transfer"),

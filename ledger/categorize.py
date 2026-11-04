@@ -35,22 +35,22 @@ BUILTIN = [
     (r"\bRENT\b|PROPERTY MGMT|PROPERTY MANAGEMENT|REALTY|MINTO|HOMESTEAD|CLV GROUP|TIMBERCREEK|CAPREIT|SKYLINE LIVING|DOMUS|LEASE PAYMENT", "Rent", None),
     # ── food ──
     (r"UBER ?EATS|DOORDASH|SKIP ?THE ?DISHES|SKIPTHEDISHES|FANTUAN|RITUAL\.CO|GRUBHUB", "Food Delivery", None),
-    (r"TIM HORTON|STARBUCKS|SECOND CUP|BRIDGEHEAD|\bCOFFEE\b|\bCAFE\b|CAFÉ|BALZAC|PRESOTEA|CHATIME|COCO FRESH|GONG CHA|DAVIDSTEA|BUBBLE TEA|THE ALLEY|KUNG FU TEA", "Coffee", None),
+    (r"TIM HORTON|STARBUCKS|SECOND CUP|BRIDGEHEAD|\bCOFFEE\b|\bCAFE\b|CAFÉ|BALZAC|PRESOTEA|CHATIME|COCO FRESH|GONG CHA|DAVIDSTEA|BUBBLE TEA|THE ALLEY|KUNG FU TEA|TEALIVE|VAN HOUTTE|COFFEE CULTURE|MCCAFE|DAVIDS TEA", "Coffee", None),
     (r"LCBO|BEER STORE|\bSAQ\b|WINE RACK|BREWERY|WINERY", "Alcohol", None),
-    (r"COSTCO GAS|PETRO-?CAN|\bESSO\b|\bSHELL\b|ULTRAMAR|PIONEER|CANADIAN TIRE GAS|GAS BAR|HUSKY|\bIRVING\b|\bMOBIL\b|CIRCLE K|SUNOCO|FAS GAS|ON THE RUN|GAS STATION", "Gas", None),
-    (r"LOBLAW|NO ?FRILLS|\bMETRO\b|SOBEYS|FOOD BASICS|FRESHCO|FARM ?BOY|FORTINOS|ZEHRS|SUPERSTORE|REAL CDN|COSTCO|T&T|\bADONIS|YOUR INDEPENDENT|VALU-?MART|GIANT TIGER|INSTACART|WHOLE FOODS|NATIONS FRESH|BULK BARN|SAFEWAY|\bIGA\b|\bMAXI\b|PROVIGO|SUPER C|FOOD MARKET|GROCER|MARCHE|MARKET\b|VOILA", "Groceries", None),
-    (r"RESTAURANT|\bGRILL\b|PIZZA|SUSHI|SHAWARMA|BURGER|MCDONALD|\bA&W\b|WENDY|\bKFC\b|SUBWAY|CHIPOTLE|FRESHII|POPEYES|DOMINO|\bPHO\b|RAMEN|\bTHAI\b|KITCHEN|BISTRO|\bBAR\b|\bPUB\b|TACO|\bBBQ\b|WINGS|DINER|EATERY|HARVEY|BOSTON PIZZA|MARY BROWN|OSMOW|BOOSTER JUICE|DAIRY QUEEN|BIRYANI|CURRY|TANDOOR|\bMELT\b|NANDO|BARBURRITO|MUCHO BURRITO|GUAC|POKE|DUMPLING|NOODLE|SMOKE'?S|CHICK-?FIL|FIVE GUYS|PANERA|CRUMBL|TACO BELL|PIZZA PIZZA|LITTLE CAESAR|ST-?HUBERT|SWISS CHALET|MONTANA|KELSEY|EARLS|JOEY|CACTUS CLUB|THE KEG|MILESTONES|SCORES|DENNY|IHOP|\bCORA\b|BAKERY|PATISSERIE|DESSERT|GELATO|ICE CREAM|BEAVERTAILS|SHAWARMA|MANDARIN|BUFFET|HOT POT|KBBQ|CHIPOTLE|STEAKHOUSE|TAVERN|BRASSERIE|FOOD COURT|\bDELI\b", "Restaurants", None),
+    (r"COSTCO GAS|PETRO-?CAN|\bESSO\b|\bSHELL\b|ULTRAMAR|PIONEER|CANADIAN TIRE GAS|GAS BAR|HUSKY|\bIRVING\b|\bMOBIL\b|CIRCLE[ -]?K|SUNOCO|FAS GAS|ON THE RUN|GAS STATION", "Gas", None),
+    (r"LOBLAW|NO ?FRILLS|\bMETRO\b|SOBEYS|FOOD BASICS|FRESHCO|FARM ?BOY|FORTINOS|ZEHRS|SUPERSTORE|REAL CDN|COSTCO|T&T|\bADONIS|YOUR INDEPENDENT|VALU-?MART|GIANT TIGER|INSTACART|WHOLE FOODS|NATIONS FRESH|BULK BARN|SAFEWAY|\bIGA\b|\bMAXI\b|PROVIGO|SUPER C|FOOD MARKET|GROCER|MARCHE|MARKET\b|VOILA|\bRCSS\b|\bYIG\b|FOODMART|FOOD MART", "Groceries", None),
+    (r"RESTAURANT|\bGRILL\b|PIZZA|SUSHI|SHAWARMA|BURGER|MCDONALD|\bA&W\b|WENDY|\bKFC\b|SUBWAY|CHIPOTLE|FRESHII|POPEYES|DOMINO|\bPHO\b|RAMEN|\bTHAI\b|KITCHEN|BISTRO|\bBAR\b|\bPUB\b|TACO|\bBBQ\b|WINGS|DINER|EATERY|HARVEY|BOSTON PIZZA|MARY BROWN|OSMOW|BOOSTER JUICE|DAIRY QUEEN|BIRYANI|CURRY|TANDOOR|\bMELT\b|NANDO|BARBURRITO|MUCHO BURRITO|GUAC|POKE|DUMPLING|NOODLE|SMOKE'?S|CHICK-?FIL|FIVE GUYS|PANERA|CRUMBL|TACO BELL|PIZZA PIZZA|LITTLE CAESAR|ST-?HUBERT|SWISS CHALET|MONTANA|KELSEY|EARLS|JOEY|CACTUS CLUB|THE KEG|MILESTONES|SCORES|DENNY|IHOP|\bCORA\b|BAKERY|PATISSERIE|DESSERT|GELATO|ICE CREAM|BEAVERTAILS|SHAWARMA|MANDARIN|BUFFET|HOT POT|KBBQ|CHIPOTLE|STEAKHOUSE|TAVERN|BRASSERIE|FOOD COURT|\bDELI\b|BURRITO|MAC SHACK|POULET ROUGE|VIETNAMESE|ROADHOUSE|DOLCI SAPORI|FIREHOUSE SUBS|JIMMY THE GREEK|MEAT BOWL|WOLF DOWN|BRASSEURS|KABAB|KEBAB|BAGEL|BATON ROUGE|CINNABON|COBS BREAD|DOSA|DONAIR|JACK ASTOR|CAKERY|LAZEEZ|LOKMA|CHURRO|MARCELLO|NEW YORK FRIES|SEAR & FRY|SHAKE SHACK|SULTAN AHMET|BIRYANI|BIRYWANI|LIEUTENANT|FOOD TRUCK|TRATTORIA|TRIPLE O|EGGSPECTATION|LEVEL ONE|MARBLE SLAB|TAHINI|WAFFLE|MERRY DAIRY|ARAMARK|SHAWERMA|FALAFEL|POUTINE|BANH MI|\bOSTERIA|PIZZERIA|CREAMERY|\bCREPE", "Restaurants", None),
     # ── transport ──
     (r"PRESTO|OC ?TRANSPO|\bTTC\b|GO TRANSIT|VIA RAIL|\bSTM\b|\bGRT\b|\bO-?TRAIN|MIWAY|\bSTO\b|TRANSIT", "Transit", None),
-    (r"\bUBER\b(?!.*EATS)|\bLYFT\b|\bTAXI\b|BLUELINE|COOP TAXI|\bBOLT\b", "Rideshare", None),
-    (r"PARKING|IMPARK|INDIGO PARK|PRECISE PARK|\bHONK\b|PAYBYPHONE|407 ?ETR|GREEN P|PARKLINK", "Parking & Tolls", None),
-    (r"MR\.? ?LUBE|JIFFY|\bTIRE\b|MIDAS|KAL TIRE|CAR WASH|SERVICE ?ONTARIO|AUTO PARTS|NAPA|PARTSOURCE|AUTO REPAIR|COLLISION|\bDEALER|TOYOTA|HONDA|MAZDA|HYUNDAI|NISSAN|VOLKSWAGEN|\bBMW\b|MERCEDES|AUDI\b|\bKIA\b|SUBARU|LEXUS|TESLA", "Car Maintenance", OUT),
+    (r"\bUBER\b(?!.*EATS)|\bLYFT\b|\bTAXI\b|BLUELINE|COOP TAXI|\bBOLT\b|\bBIRD\b|\bLIME\*|NEURON", "Rideshare", None),
+    (r"PARKING|IMPARK|INDIGO PARK|PRECISE PARK|\bHONK\b|PAYBYPHONE|407 ?ETR|GREEN P|PARKLINK|MOBILITE DUR|PENALTIES|PARKING TICKET", "Parking & Tolls", None),
+    (r"MR\.? ?LUBE|JIFFY|\bTIRE\b|MIDAS|KAL TIRE|CAR WASH|SERVICE ?ONTARIO|AUTO PARTS|NAPA|PARTSOURCE|AUTO REPAIR|COLLISION|DETAIL MY RIDE|DETAILING|MOTORWORKS|SPEEDY GLASS|WHEEL SURGEON|AUTO GLASS|\bDEALER|TOYOTA|HONDA|MAZDA|HYUNDAI|NISSAN|VOLKSWAGEN|\bBMW\b|MERCEDES|AUDI\b|\bKIA\b|SUBARU|LEXUS|TESLA", "Car Maintenance", OUT),
     (r"INSURANCE|\bINTACT\b|TD INSURANCE|BELAIRDIRECT|\bAVIVA\b|DESJARDINS (INS|GEN)|SONNET|CO-?OPERATORS|ECONOMICAL|WAWANESA|ALLSTATE", "Car Insurance", OUT),
     # ── subscriptions ──
     (r"ANTHROPIC|CLAUDE\.AI|OPENAI|CHATGPT|GITHUB|VERCEL|NOTION|ADOBE|MICROSOFT|MSFT|GOOGLE ?\*? ?(STORAGE|ONE|CLOUD|WORKSPACE|GSUITE)|DROPBOX|1PASSWORD|ICLOUD|APPLE\.COM/BILL|JETBRAINS|CURSOR|LEETCODE|MEDIUM\.COM|LINKEDIN|NAMECHEAP|CLOUDFLARE|\bAWS\b|AMAZON WEB SERV|DIGITALOCEAN|CHEGG|GRAMMARLY|PERPLEXITY|MIDJOURNEY|REPLIT|HEROKU|NETLIFY|SUPABASE|RAILWAY|GODADDY|SQUARESPACE|\bWIX\b|CANVA|FIGMA|ZOOM\.US|SLACK|PROTON|NORDVPN|EXPRESSVPN|MULLVAD|DUOLINGO", "Software & AI", None),
     (r"SPOTIFY|NETFLIX|DISNEY|CRAVE|PRIME VIDEO|YOUTUBE|APPLE MUSIC|AUDIBLE|TWITCH|PARAMOUNT|\bDAZN\b|HULU|AMAZON PRIME|PRIME MEMBER|APPLE TV|SIRIUS|TIDAL|DEEZER|CRUNCHYROLL|PATREON|SUBSTACK|ONLYFANS", "Streaming & Music", None),
     # ── health / fitness / care ──
-    (r"GOODLIFE|FIT4LESS|PLANET FITNESS|ANYTIME FITNESS|EVOLVE|CRUNCH|\bYMCA\b|\bGYM\b|FITNESS|CLIMB|BOULDER|ATHLETIC|ORANGETHEORY|F45|BARRY'?S|CROSSFIT|SPORTS CENTRE|REC CENTRE", "Gym", None),
+    (r"GOODLIFE|FIT4LESS|PLANET FITNESS|ANYTIME FITNESS|EVOLVE|CRUNCH|\bYMCA\b|\bGYM\b|FITNESS|CLIMB|BOULDER|ATHLETIC|ORANGETHEORY|F45|ABC ?FINANCIAL|BARRY'?S|CROSSFIT|SPORTS CENTRE|REC CENTRE", "Gym", None),
     (r"SHOPPERS|\bSDM\b|REXALL|PHARMA|JEAN COUTU|LONDON DRUGS|UNIPRIX|FAMILIPRIX|GUARDIAN DRUG|PHARMASAVE|DRUG MART", "Pharmacy", None),
     (r"\bGNC\b|PROSUPPS|SUPPLEMENT|PROTEIN|BODYBUILDING|POPEYE'?S SUPP|MYPROTEIN|HEALTHY PLANET|NUTRITION|VITAMIN|ALLMAX|IRON VEGAN|NA-?KD|LEGION ATHLETICS|TRANSPARENT LABS|GHOST LIFESTYLE", "Supplements", None),
     (r"DENTAL|DENTIST|ORTHODONT|CLINIC|MEDICAL|PHYSIO|OPTOMETR|OPTICAL|HOSPITAL|LIFELABS|DYNACARE|CHIRO|MASSAGE THERAP|\bRMT\b|PSYCH|COUNSEL|HEALTH CENTRE|WALK-?IN|TELUS HEALTH|MAPLE\.CA", "Medical", None),
@@ -58,20 +58,21 @@ BUILTIN = [
     # ── shopping ──
     (r"AMAZON|AMZN|\bEBAY|ALIEXPRESS|\bTEMU\b|SHEIN|ETSY|WISH\.COM|SHOPIFY|PAYPAL \*", "Online Shopping", None),
     (r"BEST BUY|APPLE STORE|APPLE\.COM(?!/BILL)|APPLE ONLINE|MEMORY EXPRESS|CANADA COMPUTERS|NEWEGG|THE SOURCE|MICROSOFT STORE|SAMSUNG|\bDELL\b|LENOVO|\bB&H\b|VISIONS ELECTRONICS|STAPLES|\bLOGITECH|RAZER|STEELSERIES", "Electronics", None),
-    (r"UNIQLO|\bH ?& ?M\b|\bZARA\b|SIMONS|WINNERS|MARSHALLS|SPORT ?CHEK|LULULEMON|\bNIKE\b|ADIDAS|\bGAP\b|OLD NAVY|ARITZIA|SSENSE|HUDSON'?S BAY|\bTHE BAY\b|BANANA REPUBLIC|J\.?CREW|CLUB MONACO|\bROOTS\b|MARK'?S\b|GARAGE CLOTHING|DYNAMITE|FOOT LOCKER|SOFTMOC|\bALDO\b|BROWNS SHOES|\bCOS\b|MASSIMO DUTTI|TOMMY HILFIGER|RALPH LAUREN|LEVI|PATAGONIA|ARC'?TERYX|NORDSTROM|HARRY ROSEN|SUITSUPPLY|INDOCHINO|TIP TOP|MOORES|\bASOS\b|ZALANDO|MR PORTER|NEW BALANCE|ON RUNNING|HOKA|COLUMBIA SPORT|\bMEC\b|ATMOSPHERE|ANTHROPOLOGIE|URBAN OUTFITTERS|AMERICAN EAGLE|ABERCROMBIE|HOLLISTER|BOSS\b|HUGO BOSS|GUESS\b|CALVIN KLEIN|FRANK AND OAK|FRANK & OAK|KOTN|EVERLANE", "Clothing", None),
-    (r"\bIKEA\b|HOME DEPOT|DOLLARAMA|DOLLAR TREE|BED BATH|HOMESENSE|LOWE'?S|\bRONA\b|STRUCTURE|STRUCTUBE|WAYFAIR|CANADIAN TIRE|WALMART|WAL-MART|LONDON DRUG|HOME HARDWARE|LINEN CHEST|KITCHEN STUFF|TARGET\b", "General Shopping", None),
+    (r"UNIQLO|\bH ?& ?M\b|\bZARA\b|SIMONS|WINNERS|MARSHALLS|SPORT ?CHEK|LULULEMON|\bNIKE\b|ADIDAS|\bGAP\b|OLD NAVY|ARITZIA|SSENSE|HUDSON'?S BAY|\bTHE BAY\b|BANANA REPUBLIC|J\.?CREW|CLUB MONACO|\bROOTS\b|MARK'?S\b|GARAGE CLOTHING|DYNAMITE|FOOT LOCKER|SOFTMOC|\bALDO\b|BROWNS SH|URBAN BEHAVIOU?R|URBAN PLANET|BLUENOTES|\bREDTAG|VALUE VILLAGE|CLEANERS|DRY ?CLEAN|\bCOS\b|MASSIMO DUTTI|TOMMY HILFIGER|RALPH LAUREN|LEVI|PATAGONIA|ARC'?TERYX|NORDSTROM|HARRY ROSEN|SUITSUPPLY|INDOCHINO|TIP TOP|MOORES|\bASOS\b|ZALANDO|MR PORTER|NEW BALANCE|ON RUNNING|HOKA|COLUMBIA SPORT|\bMEC\b|ATMOSPHERE|ANTHROPOLOGIE|URBAN OUTFITTERS|AMERICAN EAGLE|ABERCROMBIE|HOLLISTER|BOSS\b|HUGO BOSS|GUESS\b|CALVIN KLEIN|FRANK AND OAK|FRANK & OAK|KOTN|EVERLANE", "Clothing", None),
+    (r"\bIKEA\b|HOME DEPOT|DOLLARAMA|DOLLAR TREE|BED BATH|HOMESENSE|LOWE'?S|\bRONA\b|STRUCTURE|STRUCTUBE|WAYFAIR|CANADIAN TIRE|WALMART|WAL-MART|LONDON DRUG|HOME HARDWARE|LINEN CHEST|KITCHEN STUFF|TARGET\b|\bWMT\b|SUPRCTR|MINISO|U-?HAUL", "General Shopping", None),
     # ── fun ──
-    (r"CINEPLEX|LANDMARK CINEMA|TICKETMASTER|EVENTBRITE|STUBHUB|BOWLING|ESCAPE ROOM|MUSEUM|\bAMC\b|CINEMA|THEATRE|THEATER|CONCERT|LIVE NATION|SENATORS|REDBLACKS|TOPGOLF|GO-?KART|ARCADE|DAVE ?& ?BUSTER|COMEDY|NIGHTCLUB|LOUNGE", "Entertainment", None),
-    (r"\bSTEAM\b|STEAMPOWERED|PLAYSTATION|SONY INTERACTIVE|\bXBOX\b|NINTENDO|EPIC GAMES|RIOT GAMES|BLIZZARD|\bEA \*|ELECTRONIC ARTS|ROBLOX|VALORANT|ACTIVISION|UBISOFT|ROCKSTAR|GAMESTOP|EB GAMES", "Games", None),
+    (r"CINEPLEX|LANDMARK CINEMA|TICKETMASTER|EVENTBRITE|STUBHUB|BOWLING|ESCAPE ROOM|MUSEUM|\bAMC\b|CINEMA|THEATRE|THEATER|CONCERT|LIVE NATION|SENATORS|REDBLACKS|TOPGOLF|GO-?KART|ARCADE|DAVE ?(&|AND) ?BUSTER|COMEDY|NIGHTCLUB|LOUNGE|SPLITSVILLE|TRAPPED|FUNHUB|GRANDE ROUE|BILLETTERIE|NATURAL HISTORY|SCIENCE CENTRE|AQUARIUM|ZOO\b", "Entertainment", None),
+    (r"\bSTEAM\b|STEAMGAMES|STEAMPOWERED|PLAYSTATION|SONY INTERACTIVE|\bXBOX\b|NINTENDO|EPIC GAMES|RIOT GAMES|BLIZZARD|\bEA \*|ELECTRONIC ARTS|ROBLOX|VALORANT|ACTIVISION|UBISOFT|ROCKSTAR|GAMESTOP|EB GAMES", "Games", None),
     # ── travel ──
     (r"AIR CANADA|WESTJET|PORTER AIR|\bFLAIR\b|SWOOP|DELTA AIR|UNITED AIR|AMERICAN AIR|EXPEDIA|FLIGHTHUB|SUNWING|AIR TRANSAT|JETBLUE|SOUTHWEST|SPIRIT AIR|ALASKA AIR|LUFTHANSA|BRITISH AIRWAYS|EMIRATES|QATAR|AIR INDIA|KAYAK|SKYSCANNER|AIRLINE", "Flights", None),
     (r"HOTEL|MARRIOTT|HILTON|AIRBNB|BOOKING\.COM|HYATT|\bIHG\b|BEST WESTERN|HOLIDAY INN|LOPESAN|FAIRMONT|SHERATON|WESTIN|RADISSON|HOTELS\.COM|VRBO|MOTEL|\bINN\b|RESORT|HOSTEL", "Hotels", None),
     (r"NEXUS|ARRIVECAN|DUTY FREE|TRAVEL INS|PASSPORT|\bVISA FEE|ENTERPRISE RENT|HERTZ|\bAVIS\b|BUDGET RENT|NATIONAL CAR|TURO|GREYHOUND|FLIXBUS|MEGABUS|AMTRAK", "Travel Other", None),
     # ── education ──
     (r"CARLETON|UNIVERSITY|COLLEGE|TUITION|COURSERA|UDEMY|\bEDX\b|PEARSON|MCGRAW|CENGAGE|WILEY|TOP ?HAT|CROWDMARK|GRADESCOPE|KHAN|BRILLIANT\.ORG|CODECADEMY|EDUCATIVE|EXAM|TEXTBOOK", "Tuition & School", None),
-    (r"INDIGO BOOKS|INDIGO\.CA|CHAPTERS|KINDLE|BOOKSTORE|BOOK DEPOT|ABEBOOKS|KOBO", "Books", None),
+    (r"INDIGO BOOKS|INDIGO\.CA|\bINDIGO\b|CHAPTERS|KINDLE|BOOKSTORE|BOOK DEPOT|ABEBOOKS|KOBO", "Books", None),
     # ── giving ──
-    (r"DONATION|CHARITY|CANADAHELPS|GOFUNDME|RED CROSS|UNICEF|UNITED WAY|TEMPLE|MANDIR|CHURCH|MOSQUE|GURDWARA|\bSEVA\b", "Donations", None),
+    (r"DONATION|CHARITY|CANADAHELPS|GOFUNDME|GOFNDME|RED CROSS|UNICEF|UNITED WAY|TEMPLE|MANDIR|CHURCH|MOSQUE|GURDWARA|\bSEVA\b", "Donations", None),
+    (r"DESERRES|MICHAELS|HOBBIES|HOBBY|TOYS|LEGO|GAMES WORKSHOP|CRAFTS", "Hobbies", None),
     (r"\bGIFT\b|FLOWERS|FLORIST|HALLMARK|1-?800-?FLOWERS|PARTY CITY", "Gifts", None),
 ]
 _COMPILED = [(re.compile(p, re.I), c, d) for p, c, d in BUILTIN]
@@ -85,10 +86,20 @@ class Categorizer:
         self.cat_kind = {r["name"]: r["kind"] for r in con.execute("SELECT name, kind FROM categories")}
         self.reload_rules()
         self.income_from = cfg["me"].get("income_when_moved_from", {}) or {}
+        self.merchants = []
+        for m in cfg.get("merchants", []):
+            if m.get("match") and m.get("category"):
+                self.merchants.append(dict(m, _rx=re.compile(re.escape(m["match"].strip()), re.I)))
         self.people = {}
         for p in cfg.get("people", []):
             if p.get("name"):
                 self.people[p["name"].strip().upper()] = p
+
+    def _history(self, cp, tid=None):
+        """(times you've sent this person money, all transfers with them) — other transactions only."""
+        r = self.con.execute("SELECT sum(amount<0), count(*) FROM transactions WHERE counterparty=? AND id IS NOT ?",
+                             (cp, tid)).fetchone()
+        return (r[0] or 0), (r[1] or 0)
 
     def reload_rules(self):
         self.rules = [dict(r) for r in self.con.execute("SELECT * FROM rules ORDER BY origin='ai', id DESC")]
@@ -136,6 +147,9 @@ class Categorizer:
         # 2. self / people
         if cp and self.is_me(cp):
             src = (tx.get("from_institution") or "").lower()
+            if not src:  # re-sorting a stored row: the bank is kept in the description, "… FROM YOU (RBC)"
+                m = re.search(r"\(([^)]+)\)\s*$", tx.get("description") or "")
+                src = m.group(1).lower() if m else ""
             for inst, cat in self.income_from.items():
                 if amt > 0 and src and inst.lower() in src:
                     return self._set(tx, cat, "income", "rule")  # e.g. govt money parked at RBC, moved to Tangerine
@@ -167,6 +181,13 @@ class Categorizer:
                     tx["merchant"] = r["rename"]
                 return self._set(tx, r["category"], self._kind_for(r["category"], amt, r["kind"], bool(cp)), "ai" if r["origin"] == "ai" else "rule")
 
+        # 3b. merchants you named in config.toml ([[merchants]] match = "…", category = "…", rename = "…")
+        for m in self.merchants:
+            if m["_rx"].search(hay):
+                if m.get("rename"):
+                    tx["merchant"] = m["rename"]
+                return self._set(tx, m["category"], self._kind_for(m["category"], amt, m.get("kind"), bool(cp)), "rule")
+
         # 4. learned from your past manual edits on the same merchant / person
         key, val = ("counterparty", cp) if cp else ("merchant", tx.get("merchant"))
         if val:
@@ -191,11 +212,19 @@ class Categorizer:
                 if rx.search(hay):
                     return self._set(tx, cat, self._kind_for(cat, amt), "default")
 
-        # 6. fallbacks
+        # 6. fallbacks for people nobody has told Ledger about
         if cp:
+            sent, total = self._history(cp, tx.get("id"))
+            company = re.search(r"\b(INC|LTD|CORP|LLC|CO)\b\.?$|\d{5,}", cp.upper())
+            net_out = self.cfg.get("plan", {}).get("net_out_friends", True)
             if amt > 0:
+                if net_out and not company and (sent or amt <= 300):
+                    # a friend paying you back (food, outings, splitting a bill): it lowers what you spent rather
+                    # than counting as income. Bigger one-off sums from new people still get a look.
+                    return self._set(tx, "Paid to People", "reimbursement", "default")
                 return self._set(tx, "From People", "income", "default", review=True)
-            return self._set(tx, "Paid to People", "expense", "default", review=True)
+            # paying a friend is normal; a first payment of $100+ to someone new (often a business) gets a look
+            return self._set(tx, "Paid to People", "expense", "default", review=total == 0 and (-amt >= 100 or bool(company)))
         if amt > 0:
             # a credit on a merchant we've seen spending at → refund
             prev = self.con.execute(
@@ -230,9 +259,10 @@ def recategorize_all(con, cfg, include_ai=False):
             # keep AI answers unless a stronger rule now applies
             pass
         cz.categorize(tx, acct_type.get(tx["account_id"]))
-        if (tx["category"], tx["kind"], tx["merchant"]) != before:
-            # a rule now knows what this is → it no longer needs a look (manual review state is otherwise kept)
-            reviewed = 1 if not tx.get("_needs_review") and tx["cat_source"] in ("rule", "learned") else row["reviewed"]
+        # sorted with confidence now (a rule, a known person…) → it no longer needs a look
+        low_conf = row["confidence"] is not None and row["confidence"] < 0.8  # read by AI from an odd email: keep the look
+        reviewed = 1 if not tx.get("_needs_review") and not low_conf else row["reviewed"]
+        if (tx["category"], tx["kind"], tx["merchant"]) != before or reviewed != row["reviewed"]:
             con.execute(
                 "UPDATE transactions SET category=?, kind=?, cat_source=?, merchant=?, reviewed=?, updated_at=datetime('now') WHERE id=?",
                 (tx["category"], tx["kind"], tx["cat_source"], tx["merchant"], reviewed, tx["id"]),

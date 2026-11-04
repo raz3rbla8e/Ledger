@@ -78,18 +78,75 @@ print("backfill OK")
 
 # ── money requests you paid, and bank marketing that isn't a transaction ──
 from ledger.ingest_email import parse_email, NOT_TXN_SENDER, NOT_TXN_SUBJECT
-r = parse_email("Tangerine Bank <catch@payments.interac.ca>", "Interac e-Transfer: The request for $25.00 transfer to PayDirect was successfully deposited.",
-                "The $25.00 (CAD) you sent to PayDirect at x@y.com has been successfully deposited Reference Number: CAabc", "2026-08-11")
-assert r and r[0]["amount"] == -25.0 and r[0]["account"][0] == "Tangerine" and r[0]["counterparty"] == "PAYDIRECT"
+r = parse_email("Tangerine Bank <catch@payments.interac.ca>", "Interac e-Transfer: The request for $25.00 transfer to BetSite Pay was successfully deposited.",
+                "The $25.00 (CAD) you sent to BetSite Pay at x@y.com has been successfully deposited Reference Number: CAabc", "2026-08-11")
+assert r and r[0]["amount"] == -25.0 and r[0]["account"][0] == "Tangerine" and r[0]["counterparty"] == "BETSITE PAY"
 assert NOT_TXN_SENDER.search("Tangerine <forwardbanking@e.tangerine.ca>") and not NOT_TXN_SENDER.search("Tangerine <donotreply@tangerine.ca>")
 assert NOT_TXN_SUBJECT.search("Your Credit Card payment will be due soon")
 print("parsers OK")
 
 # ── people rules for a betting site: deposits and withdrawals net out in one category ──
 from ledger.categorize import Categorizer, recategorize_all
-cfg["people"] = [{"name": "PAYDIRECT", "incoming": {"category": "Gambling"}, "outgoing": {"category": "Gambling"}}]
+cfg["people"] = [{"name": "BETSITE PAY", "incoming": {"category": "Gambling"}, "outgoing": {"category": "Gambling"}}]
 cz2 = Categorizer(con, cfg)
-out = cz2.categorize({"amount": -20.0, "counterparty": "PAYDIRECT", "description": "INTERAC E-TRANSFER TO PAYDIRECT"})
-inn = cz2.categorize({"amount": 35.0, "counterparty": "PAYDIRECT", "description": "INTERAC E-TRANSFER FROM PAYDIRECT"})
+out = cz2.categorize({"amount": -20.0, "counterparty": "BETSITE PAY", "description": "INTERAC E-TRANSFER TO BETSITE PAY"})
+inn = cz2.categorize({"amount": 35.0, "counterparty": "BETSITE PAY", "description": "INTERAC E-TRANSFER FROM BETSITE PAY"})
 assert (out["category"], out["kind"]) == ("Gambling", "expense") and (inn["category"], inn["kind"]) == ("Gambling", "reimbursement"), (out, inn)
 print("gambling OK")
+
+# ── config.toml edits apply live; a broken file keeps the last good settings ──
+from ledger.sync import apply_config_changes
+p = cfg["_home"] / "config.toml"
+apply_config_changes(con, cfg, lambda *a: None, reload=True)  # baseline
+tx = {"amount": -80.0, "counterparty": "PAT PARKINGSPOT", "description": "INTERAC E-TRANSFER TO PAT PARKINGSPOT", "account_id": "x",
+      "date": "2026-10-24", "source": "email"}
+con.execute("INSERT INTO accounts(id, name, institution, type) VALUES ('x','X','Tangerine','chequing')")
+con.execute("INSERT INTO transactions(account_id, date, amount, description, counterparty, category, kind, cat_source, source, status, reviewed) "
+            "VALUES ('x','2026-10-24',-80,'INTERAC E-TRANSFER TO PAT PARKINGSPOT','PAT PARKINGSPOT','Paid to People','expense','default','email','pending',0)")
+con.commit()
+p.write_text(p.read_text() + '\n[[people]]\nname = "PAT PARKINGSPOT"\noutgoing = { category = "Parking & Tolls" }\n')
+logs = []
+assert apply_config_changes(con, cfg, logs.append, reload=True)
+r_ = tuple(con.execute("SELECT category, reviewed FROM transactions WHERE counterparty='PAT PARKINGSPOT'").fetchone()); assert r_ == ("Parking & Tolls", 1), r_
+assert any(pp["name"] == "PAT PARKINGSPOT" for pp in cfg["people"])
+good = p.read_text(); p.write_text(good + "\nthis is = = broken\n")
+assert not apply_config_changes(con, cfg, logs.append, reload=True) and cfg["people"] and "error" in logs[-1]
+n = len(logs); apply_config_changes(con, cfg, logs.append, reload=True); assert len(logs) == n  # reported once
+print("config reload OK")
+
+# ── friends you trade money with net out; known people don't need review ──
+con.execute("DELETE FROM transactions"); con.commit()
+def add(cp, amt, d):
+    con.execute("INSERT INTO transactions(account_id, date, amount, description, counterparty, category, kind, cat_source, source, status, reviewed) "
+                "VALUES ('x',?,?,?,?,'Uncategorized','expense','none','email','pending',0)", (d, amt, f"INTERAC E-TRANSFER {cp}", cp))
+for i, a in enumerate([-30, 15, -12, 20]):
+    add("JACOB EXAMPLE", a, f"2026-09-0{i+1}")
+add("STRANGER PERSON", 900, "2026-09-09")
+add("ALEX FRIEND", 25, "2026-09-10")
+add("SOME CO INC.", 50, "2026-09-11")
+con.commit()
+cfg["people"] = []
+recategorize_all(con, cfg)
+rows = {(r[0], r[1]): r[2:] for r in con.execute("SELECT counterparty, amount, category, kind, reviewed FROM transactions")}
+assert rows[("JACOB EXAMPLE", 15)] == ("Paid to People", "reimbursement", 1), rows
+assert rows[("JACOB EXAMPLE", -12)] == ("Paid to People", "expense", 1)
+assert rows[("STRANGER PERSON", 900)] == ("From People", "income", 0)  # a big sum from someone new: worth a look
+assert rows[("ALEX FRIEND", 25)] == ("Paid to People", "reimbursement", 1)     # small payback from a friend nets out
+assert rows[("SOME CO INC.", 50)] == ("From People", "income", 0)          # a company paying you is income
+print("people OK")
+
+# ── [[merchants]] in config.toml ──
+cfg["merchants"] = [{"match": "1234567 CANADA", "category": "Restaurants", "rename": "Burger place (probably)"}]
+t = Categorizer(con, cfg).categorize({"amount": -13.5, "description": "1234567 CANADA INC.", "merchant": "1234567 Canada"})
+assert (t["category"], t["merchant"], t["_needs_review"]) == ("Restaurants", "Burger place (probably)", False), t
+print("merchants OK")
+
+# ── re-sorting keeps "money you moved from RBC = government money" ──
+cfg["me"]["names"] = ["JORDAN EXAMPLE"]
+cfg["me"]["income_when_moved_from"] = {"RBC": "Government & Benefits"}
+con.execute("DELETE FROM transactions")
+con.execute("INSERT INTO transactions(account_id, date, amount, description, counterparty, category, kind, cat_source, source, status, reviewed) "
+            "VALUES ('x','2026-09-01',496,'INTERAC E-TRANSFER FROM JORDAN EXAMPLE (RBC)','JORDAN EXAMPLE','Government & Benefits','income','rule','email','pending',1)")
+con.commit(); recategorize_all(con, cfg)
+assert con.execute("SELECT category FROM transactions").fetchone()[0] == "Government & Benefits"
+print("self-transfer source OK")

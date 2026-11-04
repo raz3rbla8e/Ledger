@@ -144,6 +144,7 @@ def load() -> dict:
     cfg["ai"].setdefault("chat", "local")
     cfg.setdefault("accounts", {})
     cfg.setdefault("people", [])
+    cfg.setdefault("merchants", [])
     cfg.setdefault("applepay", {}).setdefault("cards", {})
     p = cfg.setdefault("plan", {})
     p.setdefault("savings_goal_pct", 20)

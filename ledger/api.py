@@ -9,6 +9,24 @@ from .forecast import forecast
 from .goals import goals_status
 
 
+
+def _live_messages(con):
+    """Recent assistant messages, minus ones that are no longer true (emails since read, an older morning brief)."""
+    unread = con.execute("SELECT count(*) FROM unparsed WHERE resolved=0").fetchone()[0]
+    out, brief_seen = [], False
+    for r in con.execute("SELECT key, title, body, created, sent_at, channels FROM outbox ORDER BY created DESC LIMIT 20"):
+        k = r["key"] or ""
+        if k.startswith("unparsed:") and (not unread or k != f"unparsed:{unread}"):
+            continue
+        if k.startswith("brief:"):
+            if brief_seen:
+                continue
+            brief_seen = True
+        out.append({x: r[x] for x in ("title", "body", "created", "sent_at", "channels")})
+        if len(out) == 8:
+            break
+    return out
+
 def _version(con):
     r = con.execute("SELECT value FROM meta WHERE key='data_version'").fetchone()
     return r["value"] if r else "0"
@@ -43,7 +61,7 @@ def today_page(con, cfg, month):
                       series=fc["series"][::3], buffer=fc["buffer"], start=fc["start"]),
         upcoming=upcoming(con, cfg), goals=g,
         activity=[dict(r) for r in con.execute("SELECT at, kind, text FROM activity ORDER BY id DESC LIMIT 12")],
-        messages=[dict(r) for r in con.execute("SELECT title, body, created, sent_at, channels FROM outbox ORDER BY created DESC LIMIT 8")],
+        messages=_live_messages(con),
         recent=[dict(r) for r in con.execute(
             """SELECT t.id, t.date, t.merchant, t.category, t.amount, t.kind, a.name account FROM transactions t
                LEFT JOIN accounts a ON a.id=t.account_id ORDER BY t.date DESC, t.id DESC LIMIT 8""")],
@@ -156,7 +174,7 @@ def system_page(con, cfg):
         rules=[dict(r) for r in con.execute("SELECT * FROM rules ORDER BY origin, id DESC")],
         categories=[dict(r) for r in con.execute("SELECT * FROM categories ORDER BY sort")],
         sync_log=[dict(r, summary=json.loads(r["summary"] or "{}")) for r in con.execute("SELECT * FROM sync_log ORDER BY id DESC LIMIT 8")],
-        ai=provider(cfg), telegram=bool(os.environ.get("TELEGRAM_BOT_TOKEN") and os.environ.get("TELEGRAM_CHAT_ID")),
+        ai=provider(cfg), ai_state=__import__("ledger.ai", fromlist=["x"]).ollama_state(cfg), telegram=bool(os.environ.get("TELEGRAM_BOT_TOKEN") and os.environ.get("TELEGRAM_CHAT_ID")),
         applepay=bool(os.environ.get("LEDGER_HOOK_TOKEN")), widget=bool(os.environ.get("LEDGER_WIDGET_TOKEN")),
         secrets=secrets_store.BACKEND if secrets_store.keychain_available() else ".env file",
         home=str(cfg["_home"]), inbox=str(cfg["_inbox"]),

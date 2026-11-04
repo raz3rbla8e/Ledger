@@ -118,6 +118,7 @@ def kpis(con, month):
     in_month = (today.year, today.month) == (y, m)
     r = con.execute(
         f"""SELECT sum(CASE WHEN kind='income' THEN amount ELSE 0 END) inc, -sum(CASE WHEN kind IN {SPEND_KINDS} THEN amount ELSE 0 END) exp,
+                   sum(CASE WHEN kind='reimbursement' THEN amount ELSE 0 END) back,
                    count(*) n FROM transactions WHERE substr(date,1,7)=?""", (month,)).fetchone()
     inc, exp = r["inc"] or 0, r["exp"] or 0
     # projection = fixed bills (recurring, counted once at their normal amount)
@@ -141,7 +142,9 @@ def kpis(con, month):
     avg_exp = statistics.mean([h["expenses"] for h in hist]) if hist else 0
     pend = con.execute("SELECT count(*) c FROM transactions WHERE status='pending'").fetchone()["c"]
     review = con.execute("SELECT count(*) c FROM transactions WHERE reviewed=0").fetchone()["c"]
+    back = r["back"] or 0
     return dict(month=month, income=round(inc, 2), expenses=round(exp, 2), net=round(inc - exp, 2),
+                spent_gross=round(exp + back, 2), paid_back=round(back, 2),
                 savings_rate=round((inc - exp) / inc, 3) if inc > 0 else None, projected_expenses=proj,
                 avg_expenses_3m=round(avg_exp, 2), days_in_month=nd, day=today.day if in_month else nd,
                 pending=pend, to_review=review, txns=r["n"])

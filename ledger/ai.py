@@ -6,20 +6,57 @@ import os
 import re
 import urllib.request
 
-_probe = {}
+_probe = {}          # url → (checked_at, state)
+_started = {"at": 0.0}
+PROBE_TTL = 300      # re-check every 5 minutes, so starting Ollama later is noticed without restarting Ledger
+
+
+def _ollama_exe():
+    import shutil
+    from pathlib import Path
+    for p in (shutil.which("ollama"), Path(os.environ.get("LOCALAPPDATA", "")) / "Programs/Ollama/ollama.exe",
+              Path("/Applications/Ollama.app/Contents/Resources/ollama"), Path("/usr/local/bin/ollama")):
+        if p and Path(p).is_file():
+            return str(p)
+    return None
+
+
+def ollama_state(cfg):
+    """'ready' | 'no-model' (running, but the model isn't downloaded) | 'stopped' (installed, not running) | 'missing'.
+    If Ollama is installed but not running, start it quietly (at most every 30 min) — it only serves this PC."""
+    import time
+    url = cfg["ai"].get("ollama_url", "http://localhost:11434").rstrip("/")
+    hit = _probe.get(url)
+    if hit and time.time() - hit[0] < PROBE_TTL:
+        return hit[1]
+    want = cfg["ai"].get("ollama_model", "qwen3:8b")
+    try:
+        with urllib.request.urlopen(url + "/api/tags", timeout=2) as r:
+            names = {m.get("name", "") for m in json.load(r).get("models", [])}
+        have = want in names or f"{want}:latest" in names or any(n.split(":")[0] == want for n in names)
+        state = "ready" if have else "no-model"
+    except Exception:
+        exe = _ollama_exe()
+        state = "stopped" if exe else "missing"
+        if exe and cfg["ai"].get("autostart_ollama", True) and "localhost" in url and time.time() - _started["at"] > 1800:
+            _started["at"] = time.time()
+            try:
+                import subprocess
+                flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "DETACHED_PROCESS", 0)
+                subprocess.Popen([exe, "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=flags)
+            except Exception:
+                pass
+            hit = None  # check again soon
+            _probe[url] = (time.time() - PROBE_TTL + 20, state)
+            return state
+    _probe[url] = (time.time(), state)
+    return state
 
 
 def provider(cfg):
     p = cfg["ai"].get("provider", "auto")
     if p == "auto":
-        url = cfg["ai"].get("ollama_url", "http://localhost:11434")
-        if url not in _probe:
-            try:
-                urllib.request.urlopen(url.rstrip("/") + "/api/tags", timeout=2).read()
-                _probe[url] = True
-            except Exception:
-                _probe[url] = False
-        return "ollama" if _probe[url] else "none"
+        return "ollama" if ollama_state(cfg) == "ready" else "none"
     if p == "anthropic" and not os.environ.get("ANTHROPIC_API_KEY"):
         return "none"
     return p

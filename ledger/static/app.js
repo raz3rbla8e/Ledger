@@ -129,7 +129,9 @@ async function loadSpending() {
   VERSION = D.version;
   const k = D.kpis;
   $('#s-kpis').innerHTML = [
-    ['Spent', fmt(k.expenses), k.projected_expenses != null ? `on pace for ~${fmt(k.projected_expenses)}` : `3-mo avg ${fmt(k.avg_expenses_3m)}`],
+    k.paid_back > 0
+      ? ['Spent', fmt(k.spent_gross), `${fmt(k.paid_back)} paid back by others → ${fmt(k.expenses)} net`]
+      : ['Spent', fmt(k.expenses), k.projected_expenses != null ? `on pace for ~${fmt(k.projected_expenses)}` : `3-mo avg ${fmt(k.avg_expenses_3m)}`],
     ['Income', fmt(k.income), `${k.txns} transactions`],
     ['Kept', fmt(k.net), k.savings_rate != null ? `${Math.round(k.savings_rate * 100)}% savings rate` : 'no income yet'],
     (() => { const ref = k.projected_expenses ?? k.expenses, d = ref - k.avg_expenses_3m;
@@ -348,7 +350,11 @@ async function loadSystem() {
     ...D.inboxes.map(i => { const s = bykey['inbox:' + i.address] || {}; const ok = i.has_password && !(s.fail_streak > 0);
       return src(i.address, ok, !i.has_password ? 'No app password in .env yet' : s.fail_streak ? esc(s.last_error) : `Last check ${ago(s.last_ok)} · ${s.items || 0} new so far`); }),
     src('Downloads watcher', true, D.watch.length ? `Watching ${D.watch.map(esc).join(', ')} for bank exports` : 'Off', D.watch.length ? null : 'off'),
-    src('Local AI (reads unknown emails)', D.ai !== 'none', D.ai === 'none' ? 'Ollama not running — unknown emails wait in the list below' : `Using ${D.ai}`, D.ai === 'none' ? 'off' : null),
+    src('Local AI (reads unknown emails & merchants)', D.ai !== 'none', D.ai !== 'none' ? `Using ${D.ai}` : ({
+      'no-model': 'Ollama is running but the model isn\'t downloaded — run: ollama pull qwen3:8b',
+      'stopped': 'Ollama is installed — starting it…',
+      'missing': 'Not installed (optional) — ollama.com',
+    }[D.ai_state] || 'Off — unknown emails wait in the list below'), D.ai === 'none' ? 'off' : null),
     src('Telegram', D.telegram, D.telegram ? 'Alerts, morning brief + chat active' : 'Run `python -m ledger setup` to link your bot', D.telegram ? null : 'off'),
     src('Apple Pay shortcut', D.applepay, D.applepay ? 'Ready — taps appear instantly' : 'Run `python -m ledger setup` to create its token', D.applepay ? null : 'off'),
     src('Phone widget', D.widget, D.widget ? 'Token set — see phone/ledger-widget.js' : 'Run `python -m ledger setup`', D.widget ? null : 'off'),

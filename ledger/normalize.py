@@ -15,10 +15,10 @@ PRETTY = {
     "NETFLIX.COM": "Netflix", "NETFLIX": "Netflix", "SPOTIFY": "Spotify", "YOUTUBEPREMIUM": "YouTube Premium",
     "PRESTO": "Presto", "OC TRANSPO": "OC Transpo", "LCBO": "LCBO", "THE BEER STORE": "The Beer Store",
     "WALMART": "Walmart", "WAL-MART": "Walmart", "CANADIAN TIRE": "Canadian Tire", "BEST BUY": "Best Buy",
-    "GOODLIFE": "GoodLife Fitness", "PETRO-CANADA": "Petro-Canada", "ESSO": "Esso", "SHELL": "Shell",
+    "GOODLIFE": "GoodLife Fitness", "WMT SUPRCTR": "Walmart", "RCSS": "Real Canadian Superstore", "ABCFINANCIAL": "Gym membership (ABC Financial)", "PETRO-CANADA": "Petro-Canada", "ESSO": "Esso", "SHELL": "Shell",
 }
 PROVINCES = r"(ON|QC|BC|AB|MB|SK|NS|NB|NL|PE|YT|NT|NU|CA|US|USA|CAN)"
-CITY_TAIL = re.compile(r"\s+(OTTAWA|TORONTO|NEPEAN|KANATA|GATINEAU|CAMBRIDGE|WATERLOO|KITCHENER|MONTREAL|VANCOUVER|ORLEANS|MISSISSAUGA|DEARBORN|SAN FRANCISCO|INTERNET|WWW\.\S+|HTTPS?\S*)?\s*" + PROVINCES + r"?\s*$")
+CITY_TAIL = re.compile(r"\s+(OTTAWA|TORONTO|NEPEAN|KANATA|GATINEAU|CAMBRIDGE|WATERLOO|KITCHENER|MONTREAL|VANCOUVER|ORLEANS|OTTAW|OTTA|OTT|MISSISSAUGA|DEARBORN|SAN FRANCISCO|INTERNET|WWW\.\S+|HTTPS?\S*)?\s*" + PROVINCES + r"?\s*$")
 
 
 def clean_text(s: str) -> str:
@@ -45,6 +45,7 @@ def merchant_from_description(desc: str) -> str:
     # strip common bank prefixes
     s = re.sub(r"^(POS|PURCHASE|DEBIT|VISA DEBIT|INTERAC PURCHASE|IDP PURCHASE|CONTACTLESS INTERAC PURCHASE|PRE-AUTHORIZED|PREAUTHORIZED|PAP|BILL PAYMENT|ONLINE PURCHASE|ACHAT)\s*[-:]?\s*", "", s)
     s = re.sub(r"\s+-\s+\d{3,}$", "", s)
+    s = re.sub(r"^\*?(TST|RFBT|WC|SP|SQ)\s*[-*]\s*|^SP\s+(?=[A-Z])", "", s)  # point-of-sale prefixes: Toast, Shopify, Square…
     s = re.sub(r"^(DIRECT DEPOSIT FROM|DEPOSIT FROM|PAYMENT (TO|FROM)|BILL PAYMENT TO)\s+", "", s)
     if "*" in s:
         head, tail = s.split("*", 1)
@@ -65,7 +66,21 @@ def merchant_from_description(desc: str) -> str:
     for key in sorted(PRETTY, key=len, reverse=True):
         if s == key or s.startswith(key + " ") or s.startswith(key + "."):
             return PRETTY[key]
-    return _titlecase(s)
+    return tidy_merchant(s)
+
+
+_BILL_TAIL = re.compile(r"[\s-]+(BILL[\s-]*(PAYMENT|PMNT|PMT|PAY)|PMNT|PMT|PAYMENT)$", re.I)
+
+
+def tidy_merchant(s: str) -> str:
+    """Formatting only: 'HYDRO-OTTAWA-BILL-PMNT' → 'Hydro Ottawa', 'PAYMENTUS-SERVICE-FEE' → 'Paymentus Service Fee'."""
+    s = clean_text(s)
+    if not s:
+        return s
+    if re.fullmatch(r"[A-Za-z]+(-[A-Za-z]+){2,}", s):  # words glued with hyphens (bill payees)
+        s = s.replace("-", " ")
+    s = _BILL_TAIL.sub("", s).strip() or s
+    return _titlecase(s.upper())
 
 
 ETRANSFER = re.compile(

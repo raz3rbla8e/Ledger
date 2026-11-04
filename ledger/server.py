@@ -409,6 +409,8 @@ def start_background(con, cfg, sync_every, log=print):
             else:  # every minute: Downloads folder + due notifications (cheap, no network except sending)
                 try:
                     with LOCK:
+                        from .sync import apply_config_changes
+                        apply_config_changes(con, cfg, log, reload=True)
                         from .categorize import Categorizer
                         from .ingest_files import watch_folders
                         from .notify import detect, flush

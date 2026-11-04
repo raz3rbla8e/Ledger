@@ -88,3 +88,9 @@ morning_brief = "08:30"
 weekly_report = "sun 19:00"
 monthly_report = true
 quiet_hours = "23:00-08:00"
+
+# Merchants Ledger can't place on its own (matched anywhere in the bank's description, case-insensitive):
+# [[merchants]]
+# match = "1234567 CANADA"
+# category = "Restaurants"
+# rename = "Burger place"

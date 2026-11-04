@@ -36,19 +36,6 @@ def _port_in_use(port):
         return s.connect_ex(("127.0.0.1", port)) == 0
 
 
-def _apply_config_changes(con, cfg, log):
-    """Edited config.toml (new people, categories, rules)? Re-sort existing transactions so the change shows everywhere."""
-    import hashlib
-    from .categorize import recategorize_all
-    h = hashlib.sha256((cfg["_home"] / "config.toml").read_bytes()).hexdigest()
-    old = con.execute("SELECT value FROM meta WHERE key='config_hash'").fetchone()
-    if not old or old[0] != h:
-        n = recategorize_all(con, cfg)
-        log(f"config.toml changed — re-sorted {n} transactions")
-    con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('config_hash', ?)", (h,))
-    con.commit()
-
-
 def _run_key(command):
     """Add (or with None, remove) Ledger from HKCU\\...\\Run — the per-user 'start at login' list."""
     import winreg
@@ -234,7 +221,8 @@ def main(argv=None):
             log(f"Ledger is already running on port {port} — nothing to do.")
             return
         log(f"Ledger starting (home: {cfg['_home']})")
-        _apply_config_changes(con, cfg, log)
+        from .sync import apply_config_changes
+        apply_config_changes(con, cfg, log)
         if not a.no_browser:
             webbrowser.open(f"http://127.0.0.1:{port}")
         serve(con, cfg, a.host, port, sync_every=cfg["sync"]["every_minutes"] if a.cmd == "run" else None, log=log)

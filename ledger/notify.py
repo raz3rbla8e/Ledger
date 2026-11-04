@@ -44,7 +44,7 @@ def detect(con, cfg, today=None):
             if t["date"] < recent:
                 continue
             amt = -t["amount"]
-            if t["category"] == "Salary" and t["amount"] > 0:
+            if t["category"] == "Salary" and t["amount"] > 0 and not t["counterparty"]:  # a real paycheque, not you moving money
                 s = planner.safe_to_spend(con, cfg, today)
                 bills = ", ".join(f"{b['merchant']} {money0(b['amount'])}" for b in s["upcoming_bills"][:4]) or "nothing big"
                 _queue(con, f"pay:{t['id']}", f"💰 Payday: {money(t['amount'])}",

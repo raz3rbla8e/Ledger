@@ -162,9 +162,15 @@ def run(cfg, auto=False):
                 print("   ✓ set. Next: install Tailscale on laptop + iPhone, then run:  tailscale serve --bg 8765")
                 break
 
-    from .ai import provider
-    print("\n5) Local AI: " + ("✓ Ollama is running — unknown bank emails are read on this PC" if provider(cfg) == "ollama" else
-                              f"optional — install https://ollama.com then run:  ollama pull {cfg['ai'].get('ollama_model', 'qwen3:8b')}"))
+    from .ai import ollama_state
+    model = cfg["ai"].get("ollama_model", "qwen3:8b")
+    st = ollama_state(cfg)
+    print("\n5) Local AI: " + {
+        "ready": "✓ Ollama is running with " + model + " — unknown bank emails and merchants are read on this PC",
+        "no-model": f"Ollama is running, but the model isn't downloaded yet. Run once:  ollama pull {model}  (~5 GB)",
+        "stopped": f"Ollama is installed — Ledger starts it by itself. If it still isn't ready, run:  ollama pull {model}",
+        "missing": f"optional — install https://ollama.com then run:  ollama pull {model}",
+    }[st])
 
     if _yes("\n6) Start Ledger automatically (login + after unlock, restarts if it crashes)?"):
         from .__main__ import autostart

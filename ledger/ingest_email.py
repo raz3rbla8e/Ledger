@@ -114,7 +114,8 @@ def p_interac_received(sender, subject, body, d):
 def p_interac_sent(sender, subject, body, d):
     if "interac" not in sender:
         return []
-    m = re.search(r"Your " + MONEY + r" transfer to (.+?) has been (?:successfully )?(?:deposited|accepted)", subject, re.I)
+    m = re.search(r"Your " + MONEY + r" transfer to (.+?) has been (?:successfully )?(?:deposited|accepted)", subject, re.I) or \
+        re.search(r"request for " + MONEY + r" transfer to (.+?) was (?:successfully )?deposited", subject, re.I)  # you paid a money request
     if m:
         amount, who = m.groups()
     else:
@@ -124,6 +125,7 @@ def p_interac_sent(sender, subject, body, d):
         who, amount = m.groups()
         who = re.sub(r"^Interac e-Transfer:\s*", "", who, flags=re.I)
     _, inst = _behalf(body)
+    inst = inst or institution_from_text(sender)  # "Tangerine Bank <catch@payments.interac.ca>"
     when, ref, memo = _common(body, d)
     return [dict(account=(inst or "Unknown Bank", "chequing", None, None), date=when, amount=-_amt(amount),
                  description=f"INTERAC E-TRANSFER TO {who.upper()}", counterparty=who.strip().upper(), memo=memo, ext_ref=ref)]
@@ -174,6 +176,9 @@ def p_balance_hints(sender, subject, body, d):
 
 NOT_TXN = re.compile(r"statement|newsletter|security|password|sign.?in|verify|welcome|survey|offer|promo|tax (slip|document)|"
                      r"limit reached|low (account )?balance|contact added|updated your|rewards earned this month|scammer|protection", re.I)
+# Bank marketing and reminders: never transactions, so they shouldn't show up as "couldn't read".
+NOT_TXN_SENDER = re.compile(r"forwardbanking@|promotions?@|marketing@|newsletter@|offers?@|@(?:e|email|contact)\.|administration@", re.I)
+NOT_TXN_SUBJECT = re.compile(r"(?:payment|bill) (?:will be|is) due|due soon|annual review|cash ?back on everyday|earn up to|balance transfer", re.I)
 LOOKS_TXN = re.compile(r"\$\s?[\d,]+\.\d{2}|transaction|purchase|deposit|transfer|payment|withdraw", re.I)
 
 
@@ -303,7 +308,8 @@ def ingest_message(con, cfg, cz, raw_bytes, stats, use_ai=True, verify=None):
             return
     parsed = parse_email(sender, subject, body, d)
     via_ai = False
-    if not parsed and LOOKS_TXN.search(subject + " " + body[:600]) and not NOT_TXN.search(subject):
+    if not parsed and LOOKS_TXN.search(subject + " " + body[:600]) and not NOT_TXN.search(subject) \
+            and not NOT_TXN_SENDER.search(sender) and not NOT_TXN_SUBJECT.search(subject):
         ai = parse_email_ai(cfg, sender, subject, body, d) if use_ai else None
         if ai:
             via_ai = True

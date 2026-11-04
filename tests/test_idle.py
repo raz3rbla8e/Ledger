@@ -75,3 +75,12 @@ fetched.clear(); UIDS.append(451)
 ie._sync_inbox(con, cfg, cz, ib, "pw", stats, lambda *a: None)
 assert fetched == [451], fetched  # only the new one
 print("backfill OK")
+
+# ── money requests you paid, and bank marketing that isn't a transaction ──
+from ledger.ingest_email import parse_email, NOT_TXN_SENDER, NOT_TXN_SUBJECT
+r = parse_email("Tangerine Bank <catch@payments.interac.ca>", "Interac e-Transfer: The request for $25.00 transfer to PayDirect was successfully deposited.",
+                "The $25.00 (CAD) you sent to PayDirect at x@y.com has been successfully deposited Reference Number: CAabc", "2026-08-11")
+assert r and r[0]["amount"] == -25.0 and r[0]["account"][0] == "Tangerine" and r[0]["counterparty"] == "PAYDIRECT"
+assert NOT_TXN_SENDER.search("Tangerine <forwardbanking@e.tangerine.ca>") and not NOT_TXN_SENDER.search("Tangerine <donotreply@tangerine.ca>")
+assert NOT_TXN_SUBJECT.search("Your Credit Card payment will be due soon")
+print("parsers OK")

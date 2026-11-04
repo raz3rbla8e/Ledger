@@ -231,9 +231,11 @@ def recategorize_all(con, cfg, include_ai=False):
             pass
         cz.categorize(tx, acct_type.get(tx["account_id"]))
         if (tx["category"], tx["kind"], tx["merchant"]) != before:
+            # a rule now knows what this is → it no longer needs a look (manual review state is otherwise kept)
+            reviewed = 1 if not tx.get("_needs_review") and tx["cat_source"] in ("rule", "learned") else row["reviewed"]
             con.execute(
-                "UPDATE transactions SET category=?, kind=?, cat_source=?, merchant=?, updated_at=datetime('now') WHERE id=?",
-                (tx["category"], tx["kind"], tx["cat_source"], tx["merchant"], tx["id"]),
+                "UPDATE transactions SET category=?, kind=?, cat_source=?, merchant=?, reviewed=?, updated_at=datetime('now') WHERE id=?",
+                (tx["category"], tx["kind"], tx["cat_source"], tx["merchant"], reviewed, tx["id"]),
             )
             changed += 1
     con.commit()

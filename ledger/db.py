@@ -86,7 +86,7 @@ CATEGORY_TREE = [
     ("Subscriptions", "expense", ["Software & AI", "Streaming & Music"]),
     ("Health & Fitness", "expense", ["Gym", "Pharmacy", "Supplements", "Medical"]),
     ("Personal Care", "expense", ["Grooming"]),
-    ("Fun", "expense", ["Entertainment", "Hobbies", "Games"]),
+    ("Fun", "expense", ["Entertainment", "Hobbies", "Games", "Gambling"]),
     ("Travel", "expense", ["Flights", "Hotels", "Travel Other"]),
     ("Education", "expense", ["Tuition & School", "Books"]),
     ("People & Giving", "expense", ["Paid to People", "Family Support", "Gifts", "Donations"]),
@@ -124,7 +124,8 @@ def _migrate(con):
         con.commit()
     have = {r[0] for r in con.execute("SELECT name FROM categories")}
     extra = [("Shared Costs", "Housing", "expense"), ("Parking & Tolls", "Transport", "expense"), ("Line of Credit", "Transfers", "transfer"),
-             ("Debt Repayment", "People & Giving", "expense"), ("Trip Spending", "Travel", "expense")]
+             ("Debt Repayment", "People & Giving", "expense"), ("Trip Spending", "Travel", "expense"),
+             ("Gambling", "Fun", "expense")]
     n = con.execute("SELECT COALESCE(max(sort),0) FROM categories").fetchone()[0]
     for name, grp, kind in extra:
         if have and name not in have:

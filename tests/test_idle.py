@@ -84,3 +84,12 @@ assert r and r[0]["amount"] == -25.0 and r[0]["account"][0] == "Tangerine" and r
 assert NOT_TXN_SENDER.search("Tangerine <forwardbanking@e.tangerine.ca>") and not NOT_TXN_SENDER.search("Tangerine <donotreply@tangerine.ca>")
 assert NOT_TXN_SUBJECT.search("Your Credit Card payment will be due soon")
 print("parsers OK")
+
+# ── people rules for a betting site: deposits and withdrawals net out in one category ──
+from ledger.categorize import Categorizer, recategorize_all
+cfg["people"] = [{"name": "PAYDIRECT", "incoming": {"category": "Gambling"}, "outgoing": {"category": "Gambling"}}]
+cz2 = Categorizer(con, cfg)
+out = cz2.categorize({"amount": -20.0, "counterparty": "PAYDIRECT", "description": "INTERAC E-TRANSFER TO PAYDIRECT"})
+inn = cz2.categorize({"amount": 35.0, "counterparty": "PAYDIRECT", "description": "INTERAC E-TRANSFER FROM PAYDIRECT"})
+assert (out["category"], out["kind"]) == ("Gambling", "expense") and (inn["category"], inn["kind"]) == ("Gambling", "reimbursement"), (out, inn)
+print("gambling OK")

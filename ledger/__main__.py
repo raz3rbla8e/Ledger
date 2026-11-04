@@ -162,7 +162,7 @@ def main(argv=None):
             pass
     ap = argparse.ArgumentParser(prog="ledger", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("cmd", nargs="?", default="run",
-                    choices=["run", "setup", "status", "sync", "serve", "accounts", "recat", "autostart", "demo", "ask", "report", "mcp"])
+                    choices=["run", "setup", "status", "sync", "serve", "accounts", "recat", "autostart", "demo", "ask", "report", "mcp", "import"])
     ap.add_argument("rest", nargs="*", help="question for `ask`")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=None)
@@ -210,6 +210,14 @@ def main(argv=None):
     elif a.cmd == "recat":
         from .categorize import recategorize_all
         print(f"{recategorize_all(con, cfg)} transactions re-categorized")
+    elif a.cmd == "import":  # python -m ledger import <Takeout .zip / .mbox>
+        from .categorize import Categorizer
+        from .ingest_mbox import import_mail_export
+        from .store import pair_transfers
+        for f in a.rest:
+            import_mail_export(con, cfg, Categorizer(con, cfg), f)
+        print(f"{pair_transfers(con)} transfers between your accounts linked")
+        con.commit()
     elif a.cmd == "autostart":
         autostart(cfg)
     else:

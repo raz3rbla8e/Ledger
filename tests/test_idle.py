@@ -150,3 +150,27 @@ con.execute("INSERT INTO transactions(account_id, date, amount, description, cou
 con.commit(); recategorize_all(con, cfg)
 assert con.execute("SELECT category FROM transactions").fetchone()[0] == "Government & Benefits"
 print("self-transfer source OK")
+
+# ── e-transfers to a company are sorted by what the company is ──
+t = Categorizer(con, cfg).categorize({"amount": -3700.0, "counterparty": "EXAMPLE REALTY ULC", "description": "INTERAC E-TRANSFER TO EXAMPLE REALTY ULC"})
+assert t["category"] == "Rent", t
+print("company payee OK")
+
+# ── Gmail Takeout export (.zip with an .mbox) goes through the normal email pipeline ──
+import zipfile as _zf, tempfile as _tf
+from ledger.ingest_mbox import import_mail_export, is_mail_export
+_d = _tf.mkdtemp()
+_m = ("From 123@xxx Mon Nov 02 10:00:00 +0000 2026\nMessage-ID: <exp1@x>\nFrom: Wealthsimple <notifications@o.wealthsimple.com>\n"
+      "Authentication-Results: mx.google.com; dkim=pass header.i=@o.wealthsimple.com; dmarc=pass header.from=wealthsimple.com\n"
+      "Subject: Direct deposit received\nDate: Mon, 2 Nov 2026 10:00:00 -0500\n\nAmount: $881.57 From: EXAMPLE EMPLOYER\n\n"
+      "From 124@xxx Mon Nov 02 10:00:00 +0000 2026\nMessage-ID: <exp2@x>\nFrom: Someone <me@example.com>\nSubject: hi\n\nnot a bank\n")
+_zp = os.path.join(_d, "takeout.zip")
+with _zf.ZipFile(_zp, "w") as z:
+    z.writestr("Takeout/Mail/Ledger.mbox", _m)
+assert is_mail_export(_zp)
+st = import_mail_export(con, cfg, Categorizer(con, cfg), _zp, lambda *a: None)
+assert st["messages"] == 2 and st["skipped"] == 1, st
+_r = con.execute("SELECT amount, category FROM transactions WHERE description LIKE '%EXAMPLE EMPLOYER%'").fetchone(); assert _r and tuple(_r) == (881.57, "Salary"), (tuple(_r) if _r else None, st)
+st = import_mail_export(con, cfg, Categorizer(con, cfg), _zp, lambda *a: None)
+assert st.get("new", 0) == 0  # importing twice adds nothing
+print("mail export OK")

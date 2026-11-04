@@ -267,13 +267,32 @@ def watch_folders(con, cfg, cz, log=print):
             continue
         cutoff = datetime.now().timestamp() - 45 * 86400
         for f in p.iterdir():
-            if not f.is_file() or f.suffix.lower() not in (".csv", ".ofx", ".qfx", ".qbo") or f.stat().st_mtime < cutoff:
+            suf = f.suffix.lower()
+            if not f.is_file() or suf not in (".csv", ".ofx", ".qfx", ".qbo", ".zip", ".mbox"):
                 continue
-            digest = _h.sha1(f.read_bytes()).hexdigest()
+            st = f.stat()
+            if st.st_mtime < cutoff:
+                continue
+            quick = f"seen:{f.name}:{st.st_size}:{int(st.st_mtime)}"  # cheap check first: don't re-hash big files every minute
+            if con.execute("SELECT 1 FROM meta WHERE key=?", (quick,)).fetchone():
+                continue
+            h = _h.sha1()
+            with open(f, "rb") as fh:
+                while chunk := fh.read(1 << 20):
+                    h.update(chunk)
+            digest = h.hexdigest()
+            con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?,?)", (quick, digest))
             if con.execute("SELECT 1 FROM meta WHERE key=?", (f"file:{digest}",)).fetchone():
                 continue
-            det = detect_bank_file(f)
             con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?,?)", (f"file:{digest}", f.name))
+            if suf in (".zip", ".mbox"):
+                from .ingest_mbox import import_mail_export, is_mail_export
+                if is_mail_export(f):  # a Gmail (Takeout) export of bank emails
+                    s = import_mail_export(con, cfg, cz, f, log)
+                    log_activity(con, "import", f"Read {s['messages']} emails from {f.name} → {s.get('new', 0)} new transactions")
+                    stats["mail_exports"] = stats.get("mail_exports", 0) + 1
+                continue
+            det = detect_bank_file(f)
             if not det:
                 continue
             inst, typ, last4 = det

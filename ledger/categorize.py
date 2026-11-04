@@ -215,7 +215,13 @@ class Categorizer:
         # 6. fallbacks for people nobody has told Ledger about
         if cp:
             sent, total = self._history(cp, tx.get("id"))
-            company = re.search(r"\b(INC|LTD|CORP|LLC|CO)\b\.?$|\d{5,}", cp.upper())
+            company = re.search(r"\b(INC|LTD|CORP|LLC|ULC|LLP|CO|LIMITED|CORPORATION)\b\.?$|\d{5,}", cp.upper())
+            if company:  # a business, not a person: "LPT REALTY ULC" is rent, "SPEEDY GLASS INC." car repair
+                for rx, cat, d in _COMPILED:
+                    if (d == IN and amt < 0) or (d == OUT and amt > 0) or self.cat_kind.get(cat) == "transfer":
+                        continue
+                    if rx.search(cp):
+                        return self._set(tx, cat, self._kind_for(cat, amt, None, True), "default")
             net_out = self.cfg.get("plan", {}).get("net_out_friends", True)
             if amt > 0:
                 if net_out and not company and (sent or amt <= 300):

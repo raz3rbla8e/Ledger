@@ -199,5 +199,24 @@ def main(argv=None):
         serve(con, cfg, a.host, port, sync_every=cfg["sync"]["every_minutes"] if a.cmd == "run" else None, log=log)
 
 
+def _crash_log():
+    """A background (pythonw) start has no window, so anything that kills it before logging is set up lands here."""
+    import traceback
+    from datetime import datetime
+    try:
+        d = Path(os.environ.get("LEDGER_HOME", Path.home() / "Ledger")).expanduser() / "logs"
+        d.mkdir(parents=True, exist_ok=True)
+        with open(d / "crash.log", "a", encoding="utf-8") as f:
+            f.write(f"\n=== {datetime.now():%Y-%m-%d %H:%M:%S}  {' '.join(sys.argv)}\n{traceback.format_exc()}")
+    except Exception:
+        pass
+
+
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (SystemExit, KeyboardInterrupt):
+        raise
+    except BaseException:
+        _crash_log()
+        raise

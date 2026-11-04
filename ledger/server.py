@@ -393,7 +393,8 @@ def start_background(con, cfg, sync_every, log=print):
             log("sync failed:\n" + traceback.format_exc())
 
     def main_loop():
-        last_full = 0.0
+        sync_once("startup")  # in the background, so the dashboard is up straight away even on a long first backfill
+        last_full = time.time()
         while True:
             fired = kick.wait(timeout=60)
             if fired:

@@ -13,16 +13,24 @@ if not defined PY (
   exit /b 1
 )
 echo Stopping any older Ledger that's still running...
-powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name like 'python%%'\" | Where-Object { $_.CommandLine -match '-m ledger' } | ForEach-Object { Invoke-CimMethod -InputObject $_ -MethodName Terminate | Out-Null }"
+powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name like 'python%%'\" | Where-Object { $_.CommandLine -match '-m ledger' -or $_.CommandLine -match 'run_module' } | ForEach-Object { Invoke-CimMethod -InputObject $_ -MethodName Terminate | Out-Null }"
 schtasks /End /TN Ledger >nul 2>nul
 timeout /t 2 /nobreak >nul
 echo.
 %PY% -m ledger setup --auto
 echo.
-echo Starting the first sync (the first one reads your bank emails since the backfill date, give it a minute)...
-timeout /t 20 /nobreak >nul
+echo Checking that it started...
+timeout /t 5 /nobreak >nul
 %PY% -m ledger status
+if errorlevel 1 goto notrunning
 start "" http://127.0.0.1:8765
 echo.
 echo Ledger is running in the background and starts by itself from now on. You can close this window.
 pause
+exit /b 0
+:notrunning
+echo.
+echo Ledger did NOT start. Take a screenshot of this window and send it to Claude.
+if exist "%USERPROFILE%\Ledger\logs\crash.log" type "%USERPROFILE%\Ledger\logs\crash.log"
+pause
+exit /b 1

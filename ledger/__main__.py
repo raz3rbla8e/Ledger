@@ -18,8 +18,10 @@ import platform
 import socket
 import subprocess
 import sys
+import time
 import webbrowser
 from pathlib import Path
+from xml.sax.saxutils import escape as xml_escape
 
 from . import config, db
 
@@ -34,6 +36,22 @@ def _port_in_use(port):
         return s.connect_ex(("127.0.0.1", port)) == 0
 
 
+def _run_key(command):
+    """Add (or with None, remove) Ledger from HKCU\\...\\Run — the per-user 'start at login' list."""
+    import winreg
+    k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_SET_VALUE)
+    try:
+        if command:
+            winreg.SetValueEx(k, "Ledger", 0, winreg.REG_SZ, command)
+        else:
+            try:
+                winreg.DeleteValue(k, "Ledger")
+            except FileNotFoundError:
+                pass
+    finally:
+        winreg.CloseKey(k)
+
+
 def autostart(cfg):
     py = Path(sys.executable)
     root = Path(__file__).resolve().parent.parent
@@ -42,15 +60,17 @@ def autostart(cfg):
     if sysname == "Windows":
         pyw = py.with_name("pythonw.exe")
         exe = pyw if pyw.exists() else py
+        # Triggers scoped to *this* user — an unscoped logon trigger means "any user" and needs admin ("Access is denied").
+        user = xml_escape(f"{os.environ.get('USERDOMAIN', '')}\\{os.environ.get('USERNAME', '')}".lstrip("\\"))
         # Task Scheduler: start at login AND on unlock (after sleep), restart every minute if it crashes, run on battery.
         xml = f"""<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo><Description>Ledger — private money manager</Description></RegistrationInfo>
   <Triggers>
-    <LogonTrigger><Enabled>true</Enabled></LogonTrigger>
-    <SessionStateChangeTrigger><Enabled>true</Enabled><StateChange>SessionUnlock</StateChange></SessionStateChangeTrigger>
+    <LogonTrigger><Enabled>true</Enabled><UserId>{user}</UserId></LogonTrigger>
+    <SessionStateChangeTrigger><Enabled>true</Enabled><StateChange>SessionUnlock</StateChange><UserId>{user}</UserId></SessionStateChangeTrigger>
   </Triggers>
-  <Principals><Principal id="Author"><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals>
+  <Principals><Principal id="Author"><UserId>{user}</UserId><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals>
   <Settings>
     <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
     <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
@@ -67,15 +87,27 @@ def autostart(cfg):
         f = home / "ledger-task.xml"
         f.write_text(xml, encoding="utf-16")
         r = subprocess.run(["schtasks", "/Create", "/TN", "Ledger", "/XML", str(f), "/F"], capture_output=True, text=True)
+        old = Path(os.environ.get("APPDATA", "")) / "Microsoft/Windows/Start Menu/Programs/Startup/Ledger.vbs"
+        if old.exists():
+            old.unlink()
         if r.returncode == 0:
+            _run_key(None)
             subprocess.run(["schtasks", "/Run", "/TN", "Ledger"], capture_output=True)
-            old = Path(os.environ.get("APPDATA", "")) / "Microsoft/Windows/Start Menu/Programs/Startup/Ledger.vbs"
-            if old.exists():
-                old.unlink()
             print("✓ Ledger now starts at login and after unlocking, and restarts itself if it crashes.\n"
                   "  Undo: schtasks /Delete /TN Ledger /F")
         else:
-            print("Couldn't create the scheduled task:", r.stderr.strip() or r.stdout.strip())
+            # Fallback that never needs admin: the per-user Run key (starts at login; no crash-restart).
+            _run_key(f'"{exe}" -c "import sys, runpy; sys.path.insert(0, r\'{root}\'); runpy.run_module(\'ledger\', run_name=\'__main__\')" run --no-browser')
+            print("✓ Ledger now starts when you log in (Task Scheduler said: "
+                  f"{(r.stderr or r.stdout).strip() or 'error'} — used the per-user startup list instead).")
+        port = cfg["server"]["port"]
+        if r.returncode != 0 and not _port_in_use(port):
+            subprocess.Popen([str(exe), "-m", "ledger", "run", "--no-browser"], cwd=str(root), close_fds=True,
+                             creationflags=getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+        for _ in range(30):  # wait for the dashboard to come up (the first email backfill runs in the background)
+            if _port_in_use(port):
+                break
+            time.sleep(0.5)
     elif sysname == "Darwin":
         f = Path.home() / "Library/LaunchAgents/com.ledger.local.plist"
         f.parent.mkdir(parents=True, exist_ok=True)
@@ -118,6 +150,7 @@ def status(cfg, con):
     b = con.execute("SELECT value FROM meta WHERE key='last_backup'").fetchone()
     print(f"Last backup: {b['value'] if b else 'none yet'}")
     print(f"Log file: {cfg['_home'] / 'logs' / 'ledger.log'}")
+    return 0 if _port_in_use(port) else 1
 
 
 def main(argv=None):
@@ -160,7 +193,7 @@ def main(argv=None):
         from .setup_wizard import run as setup
         return setup(cfg, auto=a.auto)
     if a.cmd == "status":
-        return status(cfg, con)
+        sys.exit(status(cfg, con))
     if a.cmd == "sync":
         from .sync import run_sync
         print(run_sync(con, cfg))
@@ -188,12 +221,6 @@ def main(argv=None):
             log(f"Ledger is already running on port {port} — nothing to do.")
             return
         log(f"Ledger starting (home: {cfg['_home']})")
-        if a.cmd == "run":
-            from .sync import run_sync
-            try:
-                log(f"first sync: {run_sync(con, cfg, log)}")
-            except Exception as e:
-                lg.exception(f"first sync failed: {e}")
         if not a.no_browser:
             webbrowser.open(f"http://127.0.0.1:{port}")
         serve(con, cfg, a.host, port, sync_every=cfg["sync"]["every_minutes"] if a.cmd == "run" else None, log=log)

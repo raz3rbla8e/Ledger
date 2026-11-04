@@ -10,7 +10,8 @@ const fmt2 = v => fmt(v, 2);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const css = n => getComputedStyle($('#root')).getPropertyValue(n).trim();
 const mname = (m, long) => new Date(m + '-15').toLocaleString('en-CA', long ? { month: 'long', year: 'numeric' } : { month: 'short', year: '2-digit' });
-const dshort = d => new Date(d + 'T12:00').toLocaleDateString('en-CA', { month: 'short', day: 'numeric' });
+const dshort = d => { const x = new Date(d + 'T12:00'), far = Math.abs(Date.now() - x) > 300 * 864e5 || x.getFullYear() !== new Date().getFullYear() && Math.abs(Date.now() - x) > 60 * 864e5;
+  return x.toLocaleDateString('en-CA', far ? { month: 'short', day: 'numeric', year: 'numeric' } : { month: 'short', day: 'numeric' }); };
 const title = s => (s || '').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 const ago = iso => { if (!iso) return 'never'; const m = Math.round((Date.now() - new Date(iso.replace(' ', 'T') + 'Z')) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`; };
 const toast = t => { const e = $('#toast'); e.textContent = t; e.classList.add('show'); setTimeout(() => e.classList.remove('show'), 2400); };
@@ -204,7 +205,7 @@ async function loadSpending() {
       ? ['Spent', fmt(k.spent_gross), `${fmt(k.paid_back)} paid back by others → ${fmt(k.expenses)} net`]
       : ['Spent', fmt(k.expenses), k.projected_expenses != null ? `on pace for ~${fmt(k.projected_expenses)}` : `3-mo avg ${fmt(k.avg_expenses_3m)}`],
     ['Income', fmt(k.income), `${k.txns} transactions`],
-    ['Kept', fmt(k.net), k.savings_rate != null ? `${Math.round(k.savings_rate * 100)}% savings rate` : 'no income yet'],
+    ['Kept', fmt(k.net), k.savings_rate == null ? 'no income yet' : k.savings_rate > 1 ? 'others paid back more than you spent so far' : `${Math.round(k.savings_rate * 100)}% savings rate`],
     (() => { const ref = k.projected_expenses ?? k.expenses, d = ref - k.avg_expenses_3m;
       return ['vs usual', (d >= 0 ? '+' : '') + fmt(d), k.projected_expenses != null ? 'where this month is heading vs your 3-month average' : 'vs your 3-month average']; })()]
     .map(([l, v, f]) => `<div class="card kpi"><div class="label">${l}</div><div class="val">${v}</div><div class="foot">${f}</div></div>`).join('');
@@ -308,7 +309,8 @@ async function loadPlan() {
   $('#f-callouts').innerHTML = [
     ['Lowest point', fmt(F.low.balance), dshort(F.low.date)],
     ['At ' + dshort(F.horizon), fmt(F.end), F.relative ? 'net change' : 'projected cash'],
-    ...(F.below_zero ? [['Runs out', dshort(F.below_zero), 'at current habits']] : F.below_buffer ? [['Under buffer', dshort(F.below_buffer), 'tighten before then']] : [['Runway', 'Covered', 'never below your buffer']]),
+    ...(F.relative ? [['Runway', 'Needs balances', 'add them on System to see when cash runs out']]
+      : F.below_zero ? [['Runs out', dshort(F.below_zero), 'at current habits']] : F.below_buffer ? [['Under buffer', dshort(F.below_buffer), 'tighten before then']] : [['Runway', 'Covered', 'never below your buffer']]),
     ['Everyday spending', fmt(F.assumptions.everyday_per_day * 30.4) + '/mo', 'what the forecast assumes']]
     .map(([a, b, c]) => `<div class="callout">${a}<b>${b}</b>${c}</div>`).join('');
   // math

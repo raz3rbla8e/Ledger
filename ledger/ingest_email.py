@@ -177,8 +177,9 @@ def p_balance_hints(sender, subject, body, d):
 NOT_TXN = re.compile(r"statement|newsletter|security|password|sign.?in|verify|welcome|survey|offer|promo|tax (slip|document)|"
                      r"limit reached|low (account )?balance|contact added|updated your|rewards earned this month|scammer|protection", re.I)
 # Bank marketing and reminders: never transactions, so they shouldn't show up as "couldn't read".
-NOT_TXN_SENDER = re.compile(r"forwardbanking@|promotions?@|marketing@|newsletter@|offers?@|@(?:e|email|contact)\.|administration@", re.I)
-NOT_TXN_SUBJECT = re.compile(r"(?:payment|bill) (?:will be|is) due|due soon|annual review|cash ?back on everyday|earn up to|balance transfer", re.I)
+NOT_TXN_SENDER = re.compile(r"forwardbanking@|promotions?@|marketing@|newsletter@|offers?@|@(?:e|email|contact|m)\.|administration@", re.I)
+NOT_TXN_SUBJECT = re.compile(r"(?:payment|bill) (?:will be|is) due|due soon|annual review|cash ?back on everyday|earn up to|balance transfer|"
+                             r"thinking of switching|earn \d+% interest|register for autodeposit|autodeposit (?:is )?(?:set up|registered)", re.I)
 LOOKS_TXN = re.compile(r"\$\s?[\d,]+\.\d{2}|transaction|purchase|deposit|transfer|payment|withdraw", re.I)
 
 

@@ -1,5 +1,6 @@
 """The assistant's brain: pay cycle, safe-to-spend, budgets, savings — computed from your transactions alone."""
 import statistics
+from . import state
 from datetime import date, timedelta
 
 from .insights import SPEND_KINDS, _months_back, recurring
@@ -34,12 +35,42 @@ def fixed_costs(con, cfg, today=None, cats=None):
         if cat in told:
             out[cat] = dict(amount=round(told[cat], 2), how="you set it")
             continue
+        if cat in SUBSCRIPTIONS:
+            now, ms = subscription_cost(con, cat, today)
+            if now > 1:
+                out[cat] = dict(amount=now, how="what's charging now: " + ", ".join(f"{m} ${a:,.2f}" for m, a in ms))
+            continue
         vals = [by[cat][m] for m in months if by[cat].get(m, 0) > 1]
         if not vals:
             continue
         out[cat] = dict(amount=round(statistics.median(vals), 2),
                         how=f"usual month (median of {len(vals)})")
     return out
+
+
+SUBSCRIPTIONS = {"Software & AI", "Streaming & Music", "Internet & Phone", "Gym", "Car Insurance"}
+
+
+def subscription_cost(con, cat, today=None):
+    """What a subscription category costs per month right now: for every merchant still charging (something in the
+    last 45 days), its latest billing cycle. So a price change counts from the next day (Spotify $7.22 → $15.81),
+    a merchant that bills twice a month (two Apple charges) counts both, and a cancelled one drops out by itself."""
+    today = today or date.today()
+    rows = con.execute(f"""SELECT merchant, date, -amount a FROM transactions WHERE category=? AND kind IN {SPEND_KINDS}
+                           AND amount<0 AND date>? AND date<=? ORDER BY date""",
+                       (cat, (today - timedelta(days=75)).isoformat(), today.isoformat())).fetchall()
+    last = {}
+    for r in rows:
+        last[r["merchant"]] = r["date"]
+    total, merchants = 0.0, []
+    for m, ld in last.items():
+        if ld <= (today - timedelta(days=45)).isoformat() or state.is_cancelled(m):
+            continue
+        start = (date.fromisoformat(ld) - timedelta(days=25)).isoformat()
+        cyc = sum(r["a"] for r in rows if r["merchant"] == m and start < r["date"] <= ld)
+        total += cyc
+        merchants.append((m, round(cyc, 2)))
+    return round(total, 2), merchants
 
 
 def other_income_monthly(con, today=None):

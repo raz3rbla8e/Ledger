@@ -10,7 +10,7 @@ from email.message import EmailMessage
 
 from . import insights as ins
 from .insights import nice
-from . import planner
+from . import planner, state
 from .ingest_email import inboxes
 
 SCHEMA = """
@@ -47,8 +47,13 @@ def detect(con, cfg, today=None):
             if t["category"] == "Salary" and t["amount"] > 0 and not t["counterparty"]:  # a real paycheque, not you moving money
                 pp = planner.pay_period(con, cfg, today)
                 due = ", ".join(f"{b['name']} {money0(b['amount'])} ({b['due'][5:]})" for b in pp["due"][:4]) or "nothing big"
+                prev = [r[0] for r in con.execute("SELECT amount FROM transactions WHERE category='Salary' AND amount>0 AND id!=? "
+                                                  "AND date<? ORDER BY date DESC LIMIT 6", (t["id"], t["date"]))]
+                usual = sorted(prev)[len(prev) // 2] if len(prev) >= 3 else None
+                short = (f"That's {money0(usual - t['amount'])} less than your usual {money0(usual)} (fewer hours or a holiday?).\n"
+                         if usual and usual - t["amount"] >= 15 else "")
                 _queue(con, f"pay:{t['id']}", f"💰 Payday: {money(t['amount'])}",
-                       f"{money(t['amount'])} from {t['merchant']} just landed.\n"
+                       f"{money(t['amount'])} from {t['merchant']} just landed.\n" + short +
                        f"{money0(pp['bills'])} of it is this pay's share of the bills. Due before next payday: {due}.\n"
                        f"→ Free until next payday: {money0(pp['left'])} (~{money0(pp['per_day'])}/day).", True)
             elif t["kind"] == "expense" and amt >= big:
@@ -71,7 +76,7 @@ def detect(con, cfg, today=None):
 
     # bills due tomorrow
     tomorrow = (today + timedelta(days=1)).isoformat()
-    due = [r for r in ins.recurring(con) if r["active"] and r["next_expected"] == tomorrow]
+    due = [r for r in ins.recurring(con) if r["active"] and r["next_expected"] == tomorrow and r["category"] in planner.SUBSCRIPTIONS | {"Utilities"}]
     if due:
         _queue(con, f"bills:{tomorrow}", "🗓️ Tomorrow: " + ", ".join(r["merchant"] for r in due),
                "Going out tomorrow:\n" + "\n".join(f"• {r['merchant']} — {money(r['amount'])}" for r in due)
@@ -84,29 +89,40 @@ def detect(con, cfg, today=None):
                f"Your {pc['payer']} pay (~{money0(pc['typical'])}, every {pc['every_days']} days) was due around "
                f"{(date.fromisoformat(pc['last']) + timedelta(days=pc['every_days'])).isoformat()} and hasn't shown up yet.", True)
 
-    # budgets
-    mo = today.strftime("%Y-%m")
-    for b in planner.budgets(con, cfg, mo):
-        if b["status"] == "over" and not b["fixed"]:
-            _queue(con, f"over:{mo}:{b['category']}", f"🚨 {b['category']} over budget",
-                   f"{b['category']}: {money0(b['spent'])} of {money0(b['budget'])} this month{' (learned budget)' if b['auto'] else ''}.")
-        elif b["status"] == "hot":
-            _queue(con, f"hot:{mo}:{b['category']}", f"🔥 {b['category']} running hot",
-                   f"{b['category']} is at {money0(b['spent'])} with {int((1 - today.day / 30) * 100)}% of the month left "
-                   f"(budget {money0(b['budget'])}). Ease off for a bit and you'll land fine.")
+    # going past what this pay leaves (once per pay period: the only "budget" that matters when you live pay to pay)
+    pp = planner.pay_period(con, cfg, today)
+    if pp["mode"] == "pay" and pp["left"] < -10:
+        until = f"payday ({date.fromisoformat(pp['next']):%a} {date.fromisoformat(pp['next']).day})" if pp["next_is_pay"] else "the end of the month"
+        _queue(con, f"overpay:{pp['start']}", f"🚨 {money0(-pp['left'])} past this pay",
+               f"After this pay's share of the bills, you've spent {money0(-pp['left'])} more than it leaves. "
+               f"That comes out of the next one. Keep it light until {until}.", True)
 
-    # subscription price changes / new subscriptions
-    for s in ins.recurring(con):
-        if not s["active"]:
-            continue
-        prev = con.execute("SELECT -amount a FROM transactions WHERE merchant=? AND kind='expense' ORDER BY date DESC LIMIT 1 OFFSET 1",
-                           (s["merchant"],)).fetchone()
-        if prev and abs(prev["a"] - s["amount"]) >= 0.5 and abs(prev["a"] - s["amount"]) / prev["a"] > 0.04:
-            _queue(con, f"price:{s['merchant']}:{s['amount']}", f"📈 {s['merchant']} changed price",
-                   f"{s['merchant']} went from {money(prev['a'])} to {money(s['amount'])} ({money0((s['amount'] - prev['a']) * 12)}/yr difference).")
-        if s["count"] == 3 and s["cadence"] == "monthly":
-            _queue(con, f"newsub:{s['merchant']}", f"🔁 New subscription spotted: {s['merchant']}",
-                   f"{s['merchant']} has charged {money(s['amount'])} three months running — that's {money0(s['yearly_cost'])}/yr. Still using it?")
+    # subscription price changes: only real subscriptions, and only against the same merchant's charge about a month
+    # earlier (so a hydro bill that varies, Dad's transfers, or Apple's two different monthly charges never trip it)
+    recent14 = (today - timedelta(days=14)).isoformat()
+    subs = tuple(planner.SUBSCRIPTIONS)
+    q = ",".join("?" * len(subs))
+    for t in con.execute(f"SELECT id, merchant, date, -amount a FROM transactions WHERE category IN ({q}) AND kind='expense' AND date>=?",
+                         (*subs, recent14)).fetchall():
+        d0 = date.fromisoformat(t["date"])
+        before = [r[0] for r in con.execute("SELECT -amount FROM transactions WHERE merchant=? AND kind='expense' AND date BETWEEN ? AND ?",
+                                            (t["merchant"], (d0 - timedelta(days=38)).isoformat(), (d0 - timedelta(days=22)).isoformat()))]
+        if len(before) == 1 and abs(before[0] - t["a"]) >= 0.5 and abs(before[0] - t["a"]) / before[0] > 0.04:
+            diff = t["a"] - before[0]
+            _queue(con, f"price:{t['merchant']}:{t['a']}", f"📈 {t['merchant']} went {'up' if diff > 0 else 'down'} to {money(t['a'])}",
+                   f"{t['merchant']} charged {money(t['a'])} on {t['date']}, up from {money(before[0])} last month "
+                   f"({'+' if diff > 0 else '−'}{money0(abs(diff) * 12)}/yr). Ledger now counts the new price in your bills."
+                   .replace("up from", "up from" if diff > 0 else "down from"))
+    for s_ in ins.recurring(con):
+        if s_["active"] and s_["count"] == 3 and s_["cadence"] == "monthly" and s_["category"] in planner.SUBSCRIPTIONS:
+            _queue(con, f"newsub:{s_['merchant']}", f"🔁 New subscription: {s_['merchant']}",
+                   f"{s_['merchant']} has charged {money(s_['amount'])} three months running ({money0(s_['yearly_cost'])}/yr). Still using it?")
+    # a subscription you said you cancelled, charging again
+    for t in con.execute("SELECT id, merchant, date, -amount a FROM transactions WHERE kind='expense' AND date>=?", (recent14,)).fetchall():
+        if t["merchant"] and state.is_cancelled(t["merchant"]):
+            _queue(con, f"zombie:{t['id']}", f"⚠️ {t['merchant']} charged you again",
+                   f"{t['merchant']} charged {money(t['a'])} on {t['date']}, but you told Ledger you cancelled it. "
+                   "Worth checking the cancellation went through, and asking for a refund.", True)
 
     # low balance alerts from the bank → tell him where to pull money from
     for h in con.execute("SELECT * FROM balance_hints WHERE date>=?", ((today - timedelta(days=2)).isoformat(),)):
@@ -155,9 +171,10 @@ def detect(con, cfg, today=None):
         _queue(con, f"health:{src['key']}:{(src['last_error_at'] or '')[:10]}", "🩺 Ledger can't read an inbox",
                f"{src['key']}: {src['last_error']}. Until this is fixed, transactions from it are missing. "
                "Usually: the Gmail app password was revoked/changed — make a new one and put it in .env.", True)
-    unp = con.execute("SELECT count(*) FROM unparsed WHERE resolved=0").fetchone()[0]
+    fresh = con.execute("SELECT msg_id FROM unparsed WHERE resolved=0 AND date>=? ORDER BY msg_id", ((today - timedelta(days=2)).isoformat(),)).fetchall()
+    unp = len(fresh)
     if unp:
-        _queue(con, f"unparsed:{unp}", "🧩 Some bank emails couldn't be read",
+        _queue(con, "unparsed:" + ",".join(r[0][-12:] for r in fresh), "🧩 A bank email couldn't be read" if unp == 1 else "🧩 Some bank emails couldn't be read",
                f"{unp} bank email(s) didn't match any reader. Start Ollama (local AI) and Ledger will read them itself, "
                "or check System → Unread emails.")
 

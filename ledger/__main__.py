@@ -225,6 +225,11 @@ def main(argv=None):
         from .server import serve
         lg = logs.setup(cfg["_home"], console=sys.stderr is not None)
         log = lg.info
+        if os.environ.get("LEDGER_RESTARTED"):  # started by a self-update: give the old copy time to step aside
+            for _ in range(120):
+                if not _port_in_use(port):
+                    break
+                time.sleep(0.5)
         if _port_in_use(port):
             log(f"Ledger is already running on port {port} — nothing to do.")
             return

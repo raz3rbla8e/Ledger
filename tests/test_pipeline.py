@@ -1,4 +1,5 @@
 """End-to-end checks with real-format bank emails and CSV exports. Run: python -m tests.test_pipeline"""
+import sys as _s; [x.reconfigure(encoding="utf-8", errors="replace") for x in (_s.stdout, _s.stderr) if hasattr(x, "reconfigure")]  # Windows pipes default to cp1252
 import os, re, sys, tempfile, json, urllib.request, threading, time
 from pathlib import Path
 from email.message import EmailMessage

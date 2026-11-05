@@ -70,7 +70,8 @@ def run_tests(log=print):
     tmp = tempfile.mkdtemp(prefix="ledger-update-test-")
     # a fake home folder too, so nothing in a test can reach your real Downloads, inbox or settings
     env = {**os.environ, "LEDGER_HOME": tmp, "LEDGER_NO_KEYCHAIN": "1", "LEDGER_NO_WATCH": "1", "PYTHONDONTWRITEBYTECODE": "1",
-           "HOME": tmp, "USERPROFILE": tmp}
+           "HOME": tmp, "USERPROFILE": tmp,
+           "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
     for k in [k for k in env if any(w in k.upper() for w in ("PASSWORD", "TOKEN", "SECRET", "API_KEY", "CHAT_ID"))]:
         env.pop(k)  # the tests never need real secrets
     py = sys.executable

@@ -1,5 +1,6 @@
 """v3 features: balance hints, balances + forecast + goals, Apple Pay merge, Downloads watcher, AI fallback, autopilot.
 Run: python -m tests.test_v3"""
+import sys as _s; [x.reconfigure(encoding="utf-8", errors="replace") for x in (_s.stdout, _s.stderr) if hasattr(x, "reconfigure")]  # Windows pipes default to cp1252
 import json
 import os
 import re

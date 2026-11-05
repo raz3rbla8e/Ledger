@@ -1,5 +1,6 @@
 """Self-update: fast-forwards from origin, runs the tests, rolls back when they fail, refuses to touch local edits.
 (Not in the updater's own test list — it runs the suite itself.)"""
+import sys as _s; [x.reconfigure(encoding="utf-8", errors="replace") for x in (_s.stdout, _s.stderr) if hasattr(x, "reconfigure")]  # Windows pipes default to cp1252
 import os, subprocess, sys, tempfile, shutil, sqlite3
 from pathlib import Path
 src = Path(__file__).resolve().parent.parent

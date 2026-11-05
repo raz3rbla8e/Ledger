@@ -1,4 +1,5 @@
 """IMAP IDLE survives quiet periods (fresh connection after a read timeout) and reports new mail."""
+import sys as _s; [x.reconfigure(encoding="utf-8", errors="replace") for x in (_s.stdout, _s.stderr) if hasattr(x, "reconfigure")]  # Windows pipes default to cp1252
 import imaplib, socket, threading, time, sys
 sys.path.insert(0, __import__("os").path.dirname(__import__("os").path.dirname(__import__("os").path.abspath(__file__))))
 from ledger import ingest_email as ie

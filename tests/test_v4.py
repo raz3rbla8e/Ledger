@@ -1,5 +1,6 @@
 """v4: security (host/auth/CSRF/tokens/headers), secrets store, people amount rules, split monthly transfers,
 what-if scenarios, widget, backups, MCP server. Run: python -m tests.test_v4"""
+import sys as _s; [x.reconfigure(encoding="utf-8", errors="replace") for x in (_s.stdout, _s.stderr) if hasattr(x, "reconfigure")]  # Windows pipes default to cp1252
 import base64
 import json
 import os

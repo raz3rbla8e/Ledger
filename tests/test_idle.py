@@ -226,3 +226,33 @@ assert pj["mode"] == "month" and not pj["next_is_pay"] and pj["start"] == "2027-
 h = planner.pay_history(con, cfg, _dd(2026, 11, 6))
 assert [x["start"] for x in h] == ["2026-10-14", "2026-10-21", "2026-10-28"]
 print("pay periods OK")
+
+# ── Wealthsimple moves between your own accounts are transfers; subscriptions count at today's price; alerts stay quiet ──
+from ledger.ingest_email import parse_email
+w = parse_email("Wealthsimple <notifications@o.wealthsimple.com>", "Your transfer is complete!",
+                "Your transfer is complete!\nAmount: $100.00\nFrom: Spending (Chequing)\nTo: TFSA (******PK0CAD)\nWe've moved $100.00 from your account.", "2026-09-19")
+assert w and w[0]["amount"] == -100.0 and w[0]["description"] == "TRANSFER TO TFSA", w
+w = parse_email("Wealthsimple <notifications@o.wealthsimple.com>", "You made a transfer",
+                "You made a transfer\nAmount: $500.00 CAD\nFrom: Spending (Chequing)\nTo: Savings Bucket (Chequing)\nTrack the status of this transfer.", "2026-09-30")
+assert w[0]["description"] == "TRANSFER TO SAVINGS BUCKET" and w[0]["amount"] == -500.0
+def _sub(d, a, m, c):
+    con.execute("INSERT INTO transactions(account_id, date, amount, description, merchant, category, kind, cat_source, source, status, reviewed) "
+                "VALUES ('x',?,?,?,?,?,'expense','default','email','posted',1)", (d, a, m.upper(), m, c))
+for mo in ("2026-08", "2026-09", "2026-10"):
+    _sub(f"{mo}-18", -15.24, "Apple.com/bill", "Software & AI"); _sub(f"{mo}-28", -4.51, "Apple.com/bill", "Software & AI")
+    _sub(f"{mo}-22", -80 - int(mo[-1]) * 7.5, "Hydro Ottawa", "Utilities")
+for mo, a in (("2026-08", -7.22), ("2026-09", -7.22), ("2026-10", -15.81)):
+    _sub(f"{mo}-23", a, "Spotify", "Streaming & Music")
+_sub("2026-07-23", -9.99, "Old Streamer", "Streaming & Music")
+con.commit()
+now, ms = planner.subscription_cost(con, "Streaming & Music", _dd(2026, 11, 5))
+assert now == 15.81 and ms == [("Spotify", 15.81)], (now, ms)                  # new price; a lapsed service drops out
+assert planner.subscription_cost(con, "Software & AI", _dd(2026, 11, 5))[0] == 19.75   # both Apple charges count
+from ledger import notify
+con.execute("DELETE FROM outbox") if con.execute("SELECT name FROM sqlite_master WHERE name='outbox'").fetchone() else None
+con.execute("INSERT OR REPLACE INTO meta(key,value) VALUES ('notified_upto', ?)", (str(con.execute('SELECT max(id) FROM transactions').fetchone()[0]),))
+notify.detect(con, cfg, _dd(2026, 11, 5))
+keys = [r[0] for r in con.execute("SELECT key FROM outbox")]
+assert "price:Spotify:15.81" in keys, keys
+assert not [k for k in keys if k.startswith("price:") and ("Apple" in k or "Hydro" in k)], keys
+print("transfers, subscriptions, quiet alerts OK")

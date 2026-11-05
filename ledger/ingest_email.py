@@ -137,6 +137,13 @@ def p_wealthsimple(sender, subject, body, d):
     s = subject.lower()
     amt = re.search(r"Amount:[\s|]*" + MONEY, body)
     src = re.search(r"From:[\s|]*([^|\n]+?)\s+(?:Your deposit|\||$)", body)
+    if amt and re.search(r"you made a transfer|your transfer is complete", s):
+        # money moving between your own Wealthsimple accounts (Spending → Savings bucket, Spending → TFSA): a transfer, never spending
+        to = re.search(r"\bTo:\s*(.+?)(?:\s+(?:Track the status|We've moved|We\u2019ve moved|-{5,})|\n|$)", body)
+        dest = re.sub(r"\s*\(.*?\)", "", clean_text(to.group(1)) if to else "")
+        dest = re.sub(r"[^\w\s&-]", "", dest).strip() or "another account"
+        return [dict(account=("Wealthsimple", "chequing", None, "Wealthsimple Chequing"), date=d, amount=-_amt(amt.group(1)),
+                     description=f"TRANSFER TO {dest.upper()}")]
     if "direct deposit" in s and amt:
         payer = clean_text(src.group(1)) if src else "DIRECT DEPOSIT"
         return [dict(account=("Wealthsimple", "chequing", None, "Wealthsimple Chequing"), date=d, amount=_amt(amt.group(1)),

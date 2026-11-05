@@ -135,6 +135,8 @@ def load() -> dict:
     cfg.setdefault("email", {})
     cfg.setdefault("files", {}).setdefault("inbox", "inbox")
     cfg["files"].setdefault("watch", [])
+    if os.environ.get("LEDGER_NO_WATCH"):  # tests and update checks: never look at your real Downloads folder
+        cfg["files"]["watch"] = []
     cfg.setdefault("sync", {}).setdefault("every_minutes", 10)
     cfg["sync"].setdefault("realtime", True)
     cfg.setdefault("server", {}).setdefault("port", 8765)

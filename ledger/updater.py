@@ -68,8 +68,10 @@ def current_version():
 def run_tests(log=print):
     """Runs the test suite with a temporary home, so it never sees your real database, config or passwords."""
     tmp = tempfile.mkdtemp(prefix="ledger-update-test-")
-    env = {**os.environ, "LEDGER_HOME": tmp, "LEDGER_NO_KEYCHAIN": "1", "PYTHONDONTWRITEBYTECODE": "1"}
-    for k in [k for k in env if k.startswith("LEDGER_") and k.endswith(("_APP_PASSWORD", "_TOKEN", "_PASSWORD")) and k != "LEDGER_HOME"]:
+    # a fake home folder too, so nothing in a test can reach your real Downloads, inbox or settings
+    env = {**os.environ, "LEDGER_HOME": tmp, "LEDGER_NO_KEYCHAIN": "1", "LEDGER_NO_WATCH": "1", "PYTHONDONTWRITEBYTECODE": "1",
+           "HOME": tmp, "USERPROFILE": tmp}
+    for k in [k for k in env if any(w in k.upper() for w in ("PASSWORD", "TOKEN", "SECRET", "API_KEY", "CHAT_ID"))]:
         env.pop(k)  # the tests never need real secrets
     py = sys.executable
     if py.lower().endswith("pythonw.exe") and os.path.exists(py[:-5] + ".exe"):
@@ -80,7 +82,7 @@ def run_tests(log=print):
                 continue
             r = subprocess.run([py, t], cwd=ROOT, env=env, capture_output=True, text=True, timeout=300, creationflags=NOWIN)
             if r.returncode:
-                return False, f"{t} failed:\n{(r.stdout + r.stderr)[-800:]}"
+                return False, f"{t} failed:\n{r.stderr[-800:] or r.stdout[-300:]}"
         r = subprocess.run([py, "-c", "import ledger.server, ledger.api, ledger.sync, ledger.planner, ledger.assistant"],
                            cwd=ROOT, env=env, capture_output=True, text=True, timeout=120, creationflags=NOWIN)
         if r.returncode:

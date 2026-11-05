@@ -13,7 +13,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 tmp = tempfile.mkdtemp()
-os.environ["LEDGER_HOME"] = tmp
+os.environ["LEDGER_HOME"] = tmp; os.environ["LEDGER_NO_WATCH"] = "1"
 os.environ["LEDGER_NO_KEYCHAIN"] = "1"  # never touch the real OS keychain from tests
 for k in ("LEDGER_DASHBOARD_PASSWORD", "LEDGER_WIDGET_TOKEN", "LEDGER_HOOK_TOKEN"):
     os.environ.pop(k, None)

@@ -2,7 +2,7 @@
 import os, re, sys, tempfile, json, urllib.request, threading, time
 from pathlib import Path
 from email.message import EmailMessage
-tmp = tempfile.mkdtemp(); os.environ["LEDGER_HOME"] = tmp
+tmp = tempfile.mkdtemp(); os.environ["LEDGER_HOME"] = tmp; os.environ["LEDGER_NO_WATCH"] = "1"
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from ledger import config, db
 from ledger.categorize import Categorizer

@@ -45,7 +45,7 @@ assert ie._message_ids(FM(), [101, 102]) == {101: "<a@x>", 102: "<b@x>"}
 print("batch fetch OK")
 
 import os, tempfile
-os.environ["LEDGER_HOME"] = tempfile.mkdtemp(); os.environ["LEDGER_NO_KEYCHAIN"] = "1"
+os.environ["LEDGER_HOME"] = tempfile.mkdtemp(); os.environ["LEDGER_NO_WATCH"] = "1"; os.environ["LEDGER_NO_KEYCHAIN"] = "1"
 from ledger import config, db
 from ledger.categorize import Categorizer
 cfg = config.load(); con = db.connect(cfg["_home"] / "ledger.db"); cz = Categorizer(con, cfg)

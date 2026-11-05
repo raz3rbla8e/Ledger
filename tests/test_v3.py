@@ -12,7 +12,7 @@ from email.message import EmailMessage
 from pathlib import Path
 
 tmp = tempfile.mkdtemp()
-os.environ["LEDGER_HOME"] = tmp
+os.environ["LEDGER_HOME"] = tmp; os.environ["LEDGER_NO_WATCH"] = "1"
 os.environ["LEDGER_HOOK_TOKEN"] = "test-token-0123456789abcdef"
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from ledger import config, db  # noqa: E402

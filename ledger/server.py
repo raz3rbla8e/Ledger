@@ -63,6 +63,17 @@ def make_handler(con, cfg):
         def _is_local(self):
             return self.client_address[0] in ("127.0.0.1", "::1") and self._hostname() in ("localhost", "127.0.0.1", "[::1]")
 
+        def _via_tailscale(self):
+            """Came through Tailscale Serve from a device signed in to your Tailscale account. Safe to trust only because
+            Ledger listens on 127.0.0.1: Serve is the only way in from outside, and it overwrites this header itself."""
+            login = (self.headers.get("Tailscale-User-Login") or "").strip().lower()
+            if not login or self.client_address[0] not in ("127.0.0.1", "::1") or not self._hostname().endswith(".ts.net"):
+                return False
+            if HOST_BOUND[0] not in ("127.0.0.1", "localhost", "::1"):
+                return False
+            allowed = [x.lower() for x in cfg["server"].get("tailscale_users", [])]
+            return not allowed or login in allowed
+
         def _deny(self, code, msg, extra=None):
             b = msg.encode()
             self.send_response(code)
@@ -79,6 +90,9 @@ def make_handler(con, cfg):
                 return self._deny(421, "Unknown host")
             if self._is_local():
                 return True  # this computer
+            if self._via_tailscale():
+                return True  # your phone, through your own Tailscale
+
             pw = os.environ.get("LEDGER_DASHBOARD_PASSWORD")
             if not pw:
                 return self._deny(403, "Remote access is off. Set a dashboard password with `python -m ledger setup`.")
@@ -280,6 +294,14 @@ def make_handler(con, cfg):
 
         def _api_post(self, path, b):
             parts = path.strip("/").split("/")
+            if path == "/api/update":
+                from . import updater
+
+                def go():
+                    with LOCK:
+                        updater.check(con, cfg, log=LOG[0], force=True)
+                threading.Thread(target=go, daemon=True).start()
+                return self._json({"status": "checking"})
             if path == "/api/sync":
                 logs = []
                 s = run_sync(con, cfg, logs.append)
@@ -369,13 +391,30 @@ def make_handler(con, cfg):
     return H
 
 
+HOST_BOUND = ["127.0.0.1"]
+LOG = [lambda *a: None]
+
+
 def serve(con, cfg, host="127.0.0.1", port=8765, sync_every=None, log=print):
     if host not in ("127.0.0.1", "localhost", "::1") and not os.environ.get("LEDGER_DASHBOARD_PASSWORD"):
         raise SystemExit("Refusing to listen on the network without a dashboard password. "
                          "Use Tailscale Serve instead (recommended, see README) or set one with `python -m ledger setup`.")
+    HOST_BOUND[0] = host
+    LOG[0] = log
+    for i in range(60):  # after a self-update the old copy may still be letting go of the port
+        try:
+            httpd = ThreadingHTTPServer((host, port), make_handler(con, cfg))
+            break
+        except OSError:
+            if i == 59 or not os.environ.get("LEDGER_RESTARTED"):
+                raise
+            time.sleep(0.5)
     if sync_every:
         start_background(con, cfg, sync_every, log)
-    httpd = ThreadingHTTPServer((host, port), make_handler(con, cfg))
+        from . import tailnet, updater
+        if host in ("127.0.0.1", "localhost", "::1"):
+            tailnet.start(port, log)
+        threading.Thread(target=updater.loop, args=(con, cfg, LOCK, log), name="updater", daemon=True).start()
     log(f"Dashboard → http://{'127.0.0.1' if host in ('0.0.0.0', '') else host}:{port}")
     httpd.serve_forever()
 

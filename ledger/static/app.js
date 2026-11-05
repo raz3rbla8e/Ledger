@@ -459,6 +459,20 @@ async function loadSubs() {
 async function loadSystem() {
   const D = await api('/api/system');
   VERSION = D.version;
+  const ph = D.phone, up = D.updates;
+  $('#y-phone').innerHTML = !ph.installed
+    ? `<p>Not set up yet. Install <b>Tailscale</b> on this laptop and on your phone, and sign in to both with the same account. Ledger notices within a couple of minutes and gives you the link here.</p>`
+    : !ph.running ? `<p>Tailscale is installed but not signed in on this laptop. Open Tailscale from the system tray and sign in.</p>`
+    : ph.enable_url ? `<p>One last step, once: Tailscale needs HTTPS switched on for your account.</p><p><a class="btn primary" href="${esc(ph.enable_url)}" target="_blank" rel="noopener">Switch on HTTPS</a></p><p class="muted">Ledger finishes the rest by itself a minute or two after.</p>`
+    : ph.serving ? `<p class="pos" style="font-weight:650">On</p><p>Open this on your phone (with Tailscale on):</p><p><a class="link" style="font-size:16px;word-break:break-all" href="${esc(ph.url)}">${esc(ph.url)}</a></p><p class="muted">Then Share → Add to Home Screen to get it as an app.</p>`
+    : `<p>Tailscale is signed in, but Ledger couldn't turn on its link yet.</p><p class="muted">${esc(ph.error || 'Trying again in a couple of minutes.')}</p>`;
+  const v = up.current || {};
+  $('#y-update').innerHTML = `<p>Running <b>${esc(v.sha || '?')}</b>${v.date ? ' from ' + dshort(v.date) : ''}${v.subject ? `<br><span class="muted">${esc(v.subject)}</span>` : ''}</p>
+    <p class="sec">${up.auto ? `Checks every ${up.every} minutes (${up.method === 'git' ? 'with git' : 'by download'}).` : 'Automatic updates are off.'}
+    ${up.checked ? `Last check ${ago(up.checked)}: ${esc(up.status)}.` : 'First check runs a few minutes after Ledger starts.'}</p>
+    ${up.error ? `<p class="neg">${esc(up.error)}</p>` : ''}<button class="btn small" id="upnow">Check now</button>`;
+  $('#upnow').onclick = async () => { $('#upnow').disabled = true; $('#upnow').textContent = 'Checking…';
+    await api('/api/update', { method: 'POST' }); setTimeout(() => go('system'), 20000); };
   const src = (name, ok, detail, state) => `<div class="src"><div class="nm"><span class="st ${state || (ok ? 'ok' : 'bad')}">${state === 'off' ? 'off' : ok ? 'ok' : 'problem'}</span>${esc(name)}</div><div class="sec" style="margin-top:4px">${detail}</div></div>`;
   const bykey = Object.fromEntries(D.sources.map(s => [s.key, s]));
   $('#y-sources').innerHTML = [

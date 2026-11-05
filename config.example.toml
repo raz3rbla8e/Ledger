@@ -105,3 +105,15 @@ quiet_hours = "23:00-08:00"
 # Fixed costs you know better than Ledger can infer (net of what others pay you back):
 # [plan.fixed]
 # Rent = 1050
+
+# Ledger keeps itself up to date: every half hour it checks GitHub, runs the tests on the new version,
+# and restarts on it only if they pass (rolls back otherwise; never overwrites files you edited by hand).
+# [updates]
+# auto = true
+# every_minutes = 30
+# branch = "main"
+
+# Phone access: install Tailscale on this computer and your phone (same account). Ledger turns on
+# Tailscale Serve for itself and shows the private link under Settings. Optionally limit who can open it:
+# [server]
+# tailscale_users = ["you@gmail.com"]

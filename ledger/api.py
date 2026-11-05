@@ -233,4 +233,12 @@ def system_page(con, cfg):
         secrets=secrets_store.BACKEND if secrets_store.keychain_available() else ".env file",
         home=str(cfg["_home"]), inbox=str(cfg["_inbox"]),
         watch=cfg["files"].get("watch", []), quality=quality(con, cfg),
+        updates=_updates(cfg), phone=dict(__import__("ledger.tailnet", fromlist=["x"]).STATE),
     )
+
+
+def _updates(cfg):
+    from . import updater
+    u = updater._settings(cfg)
+    return dict(updater.STATE, current=updater.current_version(), auto=u["auto"], every=u["every_minutes"], branch=u["branch"],
+                method="git" if updater.find_git() and (updater.ROOT / ".git").exists() else "download")

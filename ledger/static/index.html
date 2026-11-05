@@ -188,6 +188,10 @@
     <!-- SYSTEM -->
     <section id="p-system" class="page hidden">
       <div class="page-h"><h1>Settings</h1><p class="sub">What Ledger listens to, and whether it's healthy.</p></div>
+      <div class="grid g-2">
+        <div class="card"><h3>On your phone</h3><div class="sub">Private link through Tailscale. Only your own devices can open it.</div><div id="y-phone"></div></div>
+        <div class="card"><h3>Updates</h3><div class="sub">Ledger checks GitHub on its own, tests new versions, and restarts on them.</div><div id="y-update"></div></div>
+      </div>
       <div class="card"><h3>Data quality</h3><div class="sub">Is anything missing or stale? Ledger checks this every sync.</div><div id="y-quality" class="callouts"></div></div>
       <div class="card"><h3>Data sources</h3><div class="sub">Everything Ledger listens to, and whether it's healthy</div><div id="y-sources" class="sources"></div></div>
       <div class="grid g-2">

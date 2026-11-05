@@ -46,10 +46,17 @@ python -m ledger status       # running? inbox health? last backup?
 ```
 On the dashboard, type each account balance once (System → Accounts & balances). Ledger keeps them current from then on.
 
+### Updates
+Ledger updates itself. Every 30 minutes it checks GitHub; when there's a new version it runs the tests on it in a throwaway
+folder, rolls back if they fail, and otherwise restarts on the new code and tells you what changed. It only fast-forwards and
+never overwrites files you edited by hand. Settings → Updates shows the version running and has a "Check now" button.
+Turn it off with `[updates] auto = false`. (Anyone who can push to your GitHub repo can run code on your laptop this way,
+so keep two-factor sign-in on your GitHub account.)
+
 ### Phone
 1. Install [Tailscale](https://tailscale.com) on the laptop and the iPhone, signed in to the same account.
-2. On the laptop, run `tailscale serve --bg 8765`. The dashboard is now at `https://<laptop>.<tailnet>.ts.net`, visible only to your own devices and never on the public internet.
-3. **Full dashboard:** open that address in Safari, then Share → *Add to Home Screen*. It asks for the dashboard password.
+2. That's it on the laptop. Ledger notices Tailscale within a couple of minutes and turns on Tailscale Serve for itself (the first time, Settings may show a one-tap "Switch on HTTPS" link for your account). The link appears under **Settings → On your phone**: `https://<laptop>.<tailnet>.ts.net`, visible only to your own devices and never on the public internet.
+3. **Full dashboard:** open that link in Safari, then Share → *Add to Home Screen*. No password needed: Tailscale vouches for you, and anyone else can't reach it at all.
 4. **Widget:** install **Scriptable**, then paste [`phone/ledger-widget.js`](phone/ledger-widget.js) into a new script. Fill in your `ts.net` address and the widget token, then add a Scriptable widget to your home screen.
 5. **Apple Pay → instant entries:**
    1. In Shortcuts, go to Automation, tap **+**, choose **Wallet**, pick your card, and set it to **Run Immediately**.

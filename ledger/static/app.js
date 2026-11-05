@@ -429,7 +429,7 @@ async function loadTx() {
         <div class="desc" title="${esc(t.description)}">${esc(t.description)}${t.memo ? ' · “' + esc(t.memo) + '”' : ''}</div></td>
       <td class="acct sec" style="font-size:12px;white-space:nowrap">${esc(t.account_name || t.account_id)}</td>
       <td>${catSelect(t.category)}<div class="applybar hidden"><button class="btn primary small one">Just this</button><button class="btn small all">${esc(who.length > 30 ? who.slice(0, 29) + '…' : who)}</button></div></td>
-      <td class="num ${t.amount > 0 ? 'pos' : ''}" style="font-weight:600">${t.amount > 0 ? '+' : ''}${fmt2(t.amount)}</td>
+      <td class="num ${t.kind === 'transfer' ? 'muted' : t.amount > 0 ? 'pos' : ''}" style="font-weight:600" title="${t.kind === 'transfer' ? 'Money moved between your own accounts: not income, not spending' : ''}">${t.kind === 'transfer' ? '⇄ ' + fmt2(Math.abs(t.amount)) : (t.amount > 0 ? '+' : '') + fmt2(t.amount)}</td>
       <td><input class="note" placeholder="note" value="${esc(t.note || '')}" style="width:110px;font-size:12px;padding:4px 6px"></td></tr>`; }).join('') || '<tr><td colspan=6 class="empty">Nothing matches.</td></tr>');
   $$('#txtable tr[data-id]').forEach(tr => { const id = tr.dataset.id, sel = tr.querySelector('.catsel'), bar = tr.querySelector('.applybar');
     sel.onchange = () => bar.classList.remove('hidden');

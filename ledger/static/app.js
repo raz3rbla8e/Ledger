@@ -480,9 +480,10 @@ async function loadSystem() {
       return src(i.address, ok, !i.has_password ? 'No app password in .env yet' : s.fail_streak ? esc(s.last_error) : `Last check ${ago(s.last_ok)} · ${s.items || 0} new so far`); }),
     src('Downloads watcher', true, D.watch.length ? `Watching ${D.watch.map(esc).join(', ')} for bank exports` : 'Off', D.watch.length ? null : 'off'),
     src('Local AI (reads unknown emails & merchants)', D.ai !== 'none', D.ai !== 'none' ? `Using ${D.ai}` : ({
-      'no-model': 'Ollama is running but the model isn\'t downloaded — run: ollama pull qwen3:8b',
+      'no-model': D.ai_pull?.error ? `Model download failed: ${esc(D.ai_pull.error)}. Ledger will try again later.` : 'Ollama is running. Ledger is about to download the model.',
+      'pulling': D.ai_pull?.total ? `Downloading the AI model: ${Math.round(D.ai_pull.done / D.ai_pull.total * 100)}% of ${(D.ai_pull.total / 1e9).toFixed(1)} GB` : 'Downloading the AI model…',
       'stopped': 'Ollama is installed — starting it…',
-      'missing': 'Not installed (optional) — ollama.com',
+      'missing': 'Not installed yet. In PowerShell: irm https://ollama.com/install.ps1 | iex',
     }[D.ai_state] || 'Off — unknown emails wait in the list below'), D.ai === 'none' ? 'off' : null),
     src('Telegram', D.telegram, D.telegram ? 'Alerts, morning brief + chat active' : 'Run `python -m ledger setup` to link your bot', D.telegram ? null : 'off'),
     src('Apple Pay shortcut', D.applepay, D.applepay ? 'Ready — taps appear instantly' : 'Run `python -m ledger setup` to create its token', D.applepay ? null : 'off'),

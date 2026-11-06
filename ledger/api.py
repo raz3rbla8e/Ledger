@@ -228,7 +228,7 @@ def system_page(con, cfg):
         rules=[dict(r) for r in con.execute("SELECT * FROM rules ORDER BY origin, id DESC")],
         categories=[dict(r) for r in con.execute("SELECT * FROM categories ORDER BY sort")],
         sync_log=[dict(r, summary=json.loads(r["summary"] or "{}")) for r in con.execute("SELECT * FROM sync_log ORDER BY id DESC LIMIT 8")],
-        ai=provider(cfg), ai_state=__import__("ledger.ai", fromlist=["x"]).ollama_state(cfg), telegram=bool(os.environ.get("TELEGRAM_BOT_TOKEN") and os.environ.get("TELEGRAM_CHAT_ID")),
+        ai=provider(cfg), ai_state=__import__("ledger.ai", fromlist=["x"]).ollama_state(cfg), ai_pull=dict(__import__("ledger.ai", fromlist=["x"]).PULL), telegram=bool(os.environ.get("TELEGRAM_BOT_TOKEN") and os.environ.get("TELEGRAM_CHAT_ID")),
         applepay=bool(os.environ.get("LEDGER_HOOK_TOKEN")), widget=bool(os.environ.get("LEDGER_WIDGET_TOKEN")),
         secrets=secrets_store.BACKEND if secrets_store.keychain_available() else ".env file",
         home=str(cfg["_home"]), inbox=str(cfg["_inbox"]),

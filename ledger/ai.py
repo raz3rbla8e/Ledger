@@ -8,6 +8,7 @@ import urllib.request
 
 _probe = {}          # url → (checked_at, state)
 _started = {"at": 0.0}
+PULL = {"model": None, "status": None, "done": 0, "total": 0, "error": None, "running": False}
 PROBE_TTL = 300      # re-check every 5 minutes, so starting Ollama later is noticed without restarting Ledger
 
 
@@ -35,6 +36,9 @@ def ollama_state(cfg):
             names = {m.get("name", "") for m in json.load(r).get("models", [])}
         have = want in names or f"{want}:latest" in names or any(n.split(":")[0] == want for n in names)
         state = "ready" if have else "no-model"
+        if not have and "localhost" in url and cfg["ai"].get("auto_pull", True):
+            _pull(url, want)
+            state = "pulling" if PULL["running"] else state
     except Exception:
         exe = _ollama_exe()
         state = "stopped" if exe else "missing"
@@ -51,6 +55,38 @@ def ollama_state(cfg):
             return state
     _probe[url] = (time.time(), state)
     return state
+
+
+def _pull(url, model):
+    """Ollama is installed and running but the model isn't there yet: download it in the background (one time, ~5 GB),
+    from Ollama's own model library, through Ollama itself. Progress shows under Settings."""
+    import threading, time
+    if PULL["running"] or (PULL["model"] == model and PULL["error"] and time.time() - PULL.get("at", 0) < 1800):
+        return
+
+    def go():
+        PULL.update(model=model, status="starting", done=0, total=0, error=None, running=True, at=time.time())
+        try:
+            req = urllib.request.Request(url + "/api/pull", data=json.dumps({"model": model, "stream": True}).encode(),
+                                         headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=60 * 60 * 3) as r:
+                for line in r:
+                    try:
+                        ev = json.loads(line)
+                    except ValueError:
+                        continue
+                    if ev.get("error"):
+                        raise RuntimeError(ev["error"])
+                    PULL.update(status=ev.get("status", ""), done=ev.get("completed", PULL["done"]) or PULL["done"],
+                                total=ev.get("total", PULL["total"]) or PULL["total"])
+            PULL.update(status="success")
+            _probe.clear()  # re-check right away: the AI is ready now
+        except Exception as e:
+            PULL.update(error=str(e)[:200], at=time.time())
+        finally:
+            PULL["running"] = False
+    threading.Thread(target=go, name="ollama-pull", daemon=True).start()
+    time.sleep(0.2)
 
 
 def provider(cfg):

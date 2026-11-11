@@ -40,19 +40,9 @@ def ollama_state(cfg):
             _pull(url, want)
             state = "pulling" if PULL["running"] else state
     except Exception:
-        exe = _ollama_exe()
-        state = "stopped" if exe else "missing"
-        if exe and cfg["ai"].get("autostart_ollama", True) and "localhost" in url and time.time() - _started["at"] > 1800:
-            _started["at"] = time.time()
-            try:
-                import subprocess
-                flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "DETACHED_PROCESS", 0)
-                subprocess.Popen([exe, "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=flags)
-            except Exception:
-                pass
-            hit = None  # check again soon
-            _probe[url] = (time.time() - PROBE_TTL + 20, state)
-            return state
+        # Never start Ollama from here: its own app starts it quietly at login. Launching it from a background
+        # process made its helper processes pop up console windows on Windows.
+        state = "stopped" if _ollama_exe() else "missing"
     _probe[url] = (time.time(), state)
     return state
 
@@ -112,7 +102,9 @@ def _anthropic(cfg, prompt, max_tokens=1500, system=None):
 
 def _ollama(cfg, prompt, json_mode=True, system=None, schema=None):
     msgs = ([{"role": "system", "content": system}] if system else []) + [{"role": "user", "content": prompt}]
-    body = {"model": cfg["ai"].get("ollama_model", "qwen3:8b"), "stream": False, "messages": msgs, "options": {"temperature": 0},
+    body = {"model": cfg["ai"].get("ollama_model", "qwen3:8b"), "stream": False, "messages": msgs,
+            "options": {"temperature": 0, "num_ctx": int(cfg["ai"].get("context", 8192))},
+            "keep_alive": cfg["ai"].get("keep_alive", "2m"),  # free the GPU/RAM two minutes after the last question
             "think": False}
     if schema:
         body["format"] = schema  # constrained decoding: the model physically can't return anything but this shape
@@ -140,16 +132,30 @@ def _json(txt):
 
 # ───────────────── unknown merchants → category ─────────────────
 
+_BOOT = __import__("time").time()
+
+
 def ai_fill(con, cfg, log=print):
+    import time
+    if time.time() - _BOOT < 600:
+        return 0  # let the computer finish starting up first
+    last = con.execute("SELECT value FROM meta WHERE key='ai_fill_at'").fetchone()
+    if last and time.time() - float(last[0]) < 3600:
+        return 0
     if provider(cfg) == "none":
         return 0
     rows = con.execute(
         """SELECT merchant, CASE WHEN amount>0 THEN 'in' ELSE 'out' END d, count(*) n FROM transactions
            WHERE cat_source='none' AND counterparty IS NULL AND merchant IS NOT NULL AND merchant!=''
            AND NOT EXISTS (SELECT 1 FROM rules r WHERE upper(r.pattern)=upper(merchant) AND r.origin='ai')
-           GROUP BY merchant, d ORDER BY n DESC LIMIT 40""").fetchall()
+           AND NOT EXISTS (SELECT 1 FROM meta m WHERE m.key='ai_asked:' || upper(merchant))
+           GROUP BY merchant, d ORDER BY n DESC LIMIT 15""").fetchall()
     if not rows:
         return 0
+    con.execute("INSERT OR REPLACE INTO meta(key,value) VALUES ('ai_fill_at', ?)", (str(time.time()),))
+    for r in rows:  # ask once: if the model isn't sure, it stays for you to sort, instead of being asked every sync
+        con.execute("INSERT OR REPLACE INTO meta(key,value) VALUES (?, '1')", ("ai_asked:" + r["merchant"].upper(),))
+    con.commit()
     cats = [r["name"] for r in con.execute("SELECT name FROM categories ORDER BY sort")]
     lines = "\n".join(f"- {r['merchant']} ({'money in' if r['d'] == 'in' else 'money out'})" for r in rows)
     prompt = ("Categorize Canadian personal-finance merchants (Ottawa, ON). Allowed categories: " + ", ".join(cats) +

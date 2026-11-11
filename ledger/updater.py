@@ -201,7 +201,10 @@ def restart(log=print, delay=1.5):
         kw["creationflags"] = flags
     else:
         kw["start_new_session"] = True
-    subprocess.Popen([sys.executable, "-m", "ledger", "run", "--no-browser"], **kw)
+    exe = sys.executable
+    if os.name == "nt" and exe.lower().endswith("python.exe") and os.path.exists(exe[:-10] + "pythonw.exe"):
+        exe = exe[:-10] + "pythonw.exe"  # the windowless Python, so a restart never flashes a console
+    subprocess.Popen([exe, "-m", "ledger", "run", "--no-browser"], **kw)
 
     def bye():
         time.sleep(delay)
@@ -210,8 +213,9 @@ def restart(log=print, delay=1.5):
 
 
 def loop(con, cfg, lock, log=print):
-    """Background thread: first check a few minutes after start, then every `every_minutes`."""
-    time.sleep(180)
+    """Background thread: first check 15 minutes after start (never while the computer is still booting), then every
+    `every_minutes`."""
+    time.sleep(900)
     while True:
         u = _settings(cfg)
         if u["auto"]:

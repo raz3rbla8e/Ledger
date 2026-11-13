@@ -186,11 +186,11 @@ $$('#askchips button').forEach(b => b.onclick = () => { $('#askq').value = b.tex
 
 function periodMath(P) {
   const row = (l, v, cls = '') => `<div class="${cls}"><span>${l}</span><span>${v}</span></div>`;
-  const share = m => m * P.length / 30.44;
+  const sd = P.share_days || P.length, share = m => m * sd / 30.44;
   return (P.mode === 'pay' ? row(`Paycheque${P.start ? ', ' + dshort(P.start) : ''}`, fmt(P.pay)) : row('Pay this month', fmt(P.pay))) +
     (P.other ? row('Other money in since then (friends paying you back aside)', fmt(P.other)) : '') +
     row('Came in', fmt(P.money_in), 'total') +
-    Object.entries(P.bill_cats).sort((a, b) => b[1] - a[1]).map(([c, m]) => row(`− ${esc(billName(c))} <span class="muted">${fmt(m)}/mo × ${P.length} of 30.4 days</span>`, fmt(share(m)), 'ind')).join('') +
+    Object.entries(P.bill_cats).sort((a, b) => b[1] - a[1]).map(([c, m]) => row(`− ${esc(billName(c))} <span class="muted">${fmt(m)}/mo × ${sd} of 30.4 days</span>`, fmt(share(m)), 'ind')).join('') +
     row(`Free this ${P.mode === 'pay' ? 'pay' : 'month'}`, fmt(P.free), 'total') +
     row('− Everyday spending since then (food, gas, shopping…)', fmt(P.spent), 'ind') +
     row(`Left until ${P.next_is_pay ? 'payday' : dshort(P.next)}`, fmt(P.left), 'total') +

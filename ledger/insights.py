@@ -153,7 +153,7 @@ def kpis(con, month):
 def top_merchants(con, month, limit=12):
     return [dict(r) for r in con.execute(
         f"""SELECT merchant, category, -sum(amount) spent, count(*) n FROM transactions
-            WHERE substr(date,1,7)=? AND kind IN ('expense','refund') AND merchant IS NOT NULL GROUP BY merchant HAVING spent>0 ORDER BY spent DESC LIMIT ?""",
+            WHERE substr(date,1,7)=? AND kind IN ('expense','refund','reimbursement') AND merchant IS NOT NULL GROUP BY merchant HAVING spent>0 ORDER BY spent DESC LIMIT ?""",
         (month, limit))]
 
 

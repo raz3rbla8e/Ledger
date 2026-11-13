@@ -384,7 +384,9 @@ def pay_period(con, cfg, today=None):
     end = nxt - timedelta(days=1)
     length = (nxt - start).days
     pay, other, lumps = _income(con, start.isoformat(), today.isoformat())
-    bills = round(per_day_bills * length, 2)
+    # every paycheque carries the same share of the bills, even when payday shifts a day (a 6- or 8-day stretch)
+    share_days = pc["every_days"] if mode == "pay" and pc else length
+    bills = round(per_day_bills * share_days, 2)
     spent = round(_everyday(con, start.isoformat(), today.isoformat()), 2)
     money_in = round(pay + other, 2)
     free = round(money_in - bills, 2)
@@ -409,7 +411,7 @@ def pay_period(con, cfg, today=None):
                 if dd < nxt.isoformat() and not _bill_off(cfg, b["category"], dd):
                     due.append(dict(b, due=dd, status="due", paid=0))
     return dict(mode=mode, start=start.isoformat(), end=end.isoformat(), next=nxt.isoformat(), next_is_pay=next_is_pay,
-                length=length, day=(today - start).days + 1, days_left=days_left,
+                length=length, share_days=share_days, day=(today - start).days + 1, days_left=days_left,
                 pay=pay, other=other, lumps=lumps, money_in=money_in, typical_pay=pc["typical"] if pc else None, every_days=pc["every_days"] if pc else None,
                 bills=bills, bills_monthly=round(sum(on.values()), 2), bill_cats=on, spent=spent, free=free, left=left,
                 per_day=round(left / days_left, 2), usual=round(usual_day * length, 2), usual_day=round(usual_day, 2),
@@ -424,13 +426,15 @@ def pay_history(con, cfg, today=None, n=10):
         "SELECT DISTINCT date FROM transactions WHERE category='Salary' AND amount>0 AND date<? ORDER BY date DESC LIMIT ?",
         (today.isoformat(), n + 1))][::-1]
     out = []
+    pc = pay_cycle(con, today)
+    every = pc["every_days"] if pc else None
     for a, b in zip(rows, rows[1:]):
         if (b - a).days > 40:
             continue
         end = (b - timedelta(days=1)).isoformat()
         pay, other, lumps = _income(con, a.isoformat(), end)
         per_day, _ = bills_per_day(con, cfg, a)
-        bills = round(per_day * (b - a).days, 2)
+        bills = round(per_day * (every or (b - a).days), 2)  # same share for every pay, whatever day it landed
         spent = round(_everyday(con, a.isoformat(), end), 2)
         out.append(dict(start=a.isoformat(), end=end, pay=pay, other=other, bills=bills, free=round(pay + other - bills, 2),
                         spent=spent, kept=round(pay + other - bills - spent, 2)))
